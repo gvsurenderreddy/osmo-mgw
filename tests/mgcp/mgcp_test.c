@@ -1201,6 +1201,19 @@ static void test_osmux_cid(void)
 	OSMO_ASSERT(osmux_used_cid() == 0);
 }
 
+static const struct log_info_cat log_categories[] = {
+        [DMGCP] = {
+                .name = "DMGCP",
+                .description = "Media Gateway Control Protocol",
+                .enabled = 1, .loglevel = LOGL_NOTICE,
+        },
+};
+
+const struct log_info log_info = {
+        .cat = log_categories,
+        .num_cat = ARRAY_SIZE(log_categories),
+};
+
 int main(int argc, char **argv)
 {
 	msgb_talloc_ctx_init(NULL, 0);

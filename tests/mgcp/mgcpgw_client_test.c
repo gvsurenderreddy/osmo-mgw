@@ -149,6 +149,20 @@ void test_crcx(void)
 		"a=ptime:20\r\n");
 }
 
+static const struct log_info_cat log_categories[] = {
+        [DMGCP] = {
+                .name = "DMGCP",
+                .description = "Media Gateway Control Protocol",
+                .enabled = 1, .loglevel = LOGL_NOTICE,
+        },
+};
+
+const struct log_info log_info = {
+        .cat = log_categories,
+        .num_cat = ARRAY_SIZE(log_categories),
+};
+
+
 int main(int argc, char **argv)
 {
 	ctx = talloc_named_const(NULL, 1, "mgcpgw_client_test");

@@ -28,11 +28,11 @@
 #include <time.h>
 #include <limits.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <sys/socket.h>
 
 #include <openbsc/debug.h>
-#include <openbsc/gsm_data.h>
 #include <openbsc/mgcp.h>
 #include <openbsc/mgcp_internal.h>
 #include <openbsc/vty.h>
@@ -43,6 +43,7 @@
 #include <osmocom/core/select.h>
 #include <osmocom/core/stats.h>
 #include <osmocom/core/rate_ctr.h>
+#include <osmocom/core/logging.h>
 
 #include <osmocom/vty/telnet_interface.h>
 #include <osmocom/vty/logging.h>
@@ -187,18 +188,60 @@ static int read_call_agent(struct osmo_fd *fd, unsigned int what)
 	return 0;
 }
 
-extern int bsc_vty_go_parent(struct vty *vty);
+int mgcp_vty_is_config_node(struct vty *vty, int node)
+{
+        switch (node) {
+        case CONFIG_NODE:
+                return 0;
+
+        default:
+                return 1;
+        }
+}
+
+int mgcp_vty_go_parent(struct vty *vty)
+{
+        switch (vty->node) {
+        case TRUNK_NODE:
+                vty->node = MGCP_NODE;
+                vty->index = NULL;
+                break;
+        case MGCP_NODE:
+        default:
+                if (mgcp_vty_is_config_node(vty, vty->node))
+                        vty->node = CONFIG_NODE;
+                else
+                        vty->node = ENABLE_NODE;
+
+                vty->index = NULL;
+        }
+
+        return vty->node;
+}
+
 
 static struct vty_app_info vty_info = {
 	.name 		= "OpenBSC MGCP",
 	.version	= PACKAGE_VERSION,
-	.go_parent_cb	= bsc_vty_go_parent,
-	.is_config_node	= bsc_vty_is_config_node,
+	.go_parent_cb	= mgcp_vty_go_parent,
+	.is_config_node	= mgcp_vty_is_config_node,
+};
+
+static const struct log_info_cat log_categories[] = {
+        [DMGCP] = {
+                .name = "DMGCP",
+                .description = "Media Gateway Control Protocol",
+                .enabled = 1, .loglevel = LOGL_NOTICE,
+        },
+};
+
+const struct log_info log_info = {
+        .cat = log_categories,
+        .num_cat = ARRAY_SIZE(log_categories),
 };
 
 int main(int argc, char **argv)
 {
-	struct gsm_network dummy_network;
 	struct sockaddr_in addr;
 	int on = 1, rc;
 
@@ -234,7 +277,7 @@ int main(int argc, char **argv)
 		return rc;
 
 	/* start telnet after reading config for vty_get_bind_addr() */
-	rc = telnet_init_dynif(tall_bsc_ctx, &dummy_network,
+	rc = telnet_init_dynif(tall_bsc_ctx, NULL,
 			       vty_get_bind_addr(), OSMO_VTY_PORT_BSC_MGCP);
 	if (rc < 0)
 		return rc;
