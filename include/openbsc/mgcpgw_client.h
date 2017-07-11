@@ -100,7 +100,7 @@ struct msgb *mgcp_msg_mdcx(struct mgcpgw_client *mgcp,
 struct msgb *mgcp_msg_dlcx(struct mgcpgw_client *mgcp, uint16_t rtp_endpoint,
 			   unsigned int call_id);
 
-void mgcpgw_client_vty_init(int node, struct mgcpgw_client_conf *conf);
+void mgcpgw_client_vty_init(void *talloc_ctx, int node, struct mgcpgw_client_conf *conf);
 int mgcpgw_client_config_write(struct vty *vty, const char *indent);
 
 struct mgcp_response_pending * mgcpgw_client_pending_add(

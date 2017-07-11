@@ -31,6 +31,7 @@
 
 #define MGCPGW_STR "MGCP gateway configuration for RTP streams\n"
 
+void *global_mgcpgw_client_ctx = NULL;
 struct mgcpgw_client_conf *global_mgcpgw_client_conf = NULL;
 
 DEFUN(cfg_mgcpgw_local_ip, cfg_mgcpgw_local_ip_cmd,
@@ -40,8 +41,9 @@ DEFUN(cfg_mgcpgw_local_ip, cfg_mgcpgw_local_ip_cmd,
 {
 	if (!global_mgcpgw_client_conf)
 		return CMD_ERR_NOTHING_TODO;
+	OSMO_ASSERT(global_mgcpgw_client_ctx);
 	global_mgcpgw_client_conf->local_addr =
-		talloc_strdup(gsmnet_from_vty(vty), argv[0]);
+		talloc_strdup(global_mgcpgw_client_ctx, argv[0]);
 	return CMD_SUCCESS;
 }
 
@@ -63,8 +65,9 @@ DEFUN(cfg_mgcpgw_remote_ip, cfg_mgcpgw_remote_ip_cmd,
 {
 	if (!global_mgcpgw_client_conf)
 		return CMD_ERR_NOTHING_TODO;
+	OSMO_ASSERT(global_mgcpgw_client_ctx);
 	global_mgcpgw_client_conf->remote_addr =
-		talloc_strdup(gsmnet_from_vty(vty), argv[0]);
+		talloc_strdup(global_mgcpgw_client_ctx, argv[0]);
 	return CMD_SUCCESS;
 }
 
@@ -154,8 +157,9 @@ int mgcpgw_client_config_write(struct vty *vty, const char *indent)
 	return CMD_SUCCESS;
 }
 
-void mgcpgw_client_vty_init(int node, struct mgcpgw_client_conf *conf)
+void mgcpgw_client_vty_init(void *talloc_ctx, int node, struct mgcpgw_client_conf *conf)
 {
+	global_mgcpgw_client_ctx = talloc_ctx;
 	global_mgcpgw_client_conf = conf;
 
 	install_element(node, &cfg_mgcpgw_local_ip_cmd);
