@@ -4,6 +4,7 @@
 #include <string.h>
 #include <err.h>
 #include <stdint.h>
+#include <errno.h>
 
 #include <osmocom/core/talloc.h>
 #include <osmocom/core/application.h>
@@ -11,7 +12,6 @@
 #include <osmocom/netif/rtp.h>
 
 #include <openbsc/debug.h>
-#include <openbsc/gsm_data.h>
 #include <openbsc/mgcp.h>
 #include <openbsc/mgcp_internal.h>
 
@@ -577,6 +577,19 @@ static int test_repacking(int in_samples, int out_samples, int no_transcode)
 	talloc_free(ctx);
 	return 0;
 }
+
+static const struct log_info_cat log_categories[] = {
+        [DMGCP] = {
+                .name = "DMGCP",
+                .description = "Media Gateway Control Protocol",
+                .enabled = 1, .loglevel = LOGL_NOTICE,
+        },
+};
+
+const struct log_info log_info = {
+        .cat = log_categories,
+        .num_cat = ARRAY_SIZE(log_categories),
+};
 
 int main(int argc, char **argv)
 {
