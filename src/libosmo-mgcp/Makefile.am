@@ -21,15 +21,15 @@ AM_LDFLAGS = \
 	$(LIBBCG729_LIBS) \
 	$(NULL)
 
-noinst_LIBRARIES = \
-	libmgcp.a \
+lib_LTLIBRARIES = \
+	libosmo-mgcp.la \
 	$(NULL)
 
 noinst_HEADERS = \
 	g711common.h \
 	$(NULL)
 
-libmgcp_a_SOURCES = \
+libosmo_mgcp_la_SOURCES = \
 	mgcp_common.c \
 	mgcp_protocol.c \
 	mgcp_network.c \
@@ -40,7 +40,7 @@ libmgcp_a_SOURCES = \
 	mgcpgw_client_vty.c \
 	$(NULL)
 if BUILD_MGCP_TRANSCODING
-libmgcp_a_SOURCES += \
+libosmo_mgcp_la_SOURCES += \
 	mgcp_transcode.c \
 	$(NULL)
 endif
