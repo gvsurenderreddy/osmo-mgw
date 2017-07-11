@@ -150,11 +150,6 @@ void test_crcx(void)
 }
 
 static const struct log_info_cat log_categories[] = {
-        [DMGCP] = {
-                .name = "DMGCP",
-                .description = "Media Gateway Control Protocol",
-                .enabled = 1, .loglevel = LOGL_NOTICE,
-        },
 };
 
 const struct log_info log_info = {

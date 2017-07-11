@@ -26,7 +26,6 @@
 #include <osmocom/mgcp/mgcpgw_client.h>
 #include <osmocom/mgcp/mgcp.h>
 #include <osmocom/mgcp/mgcp_internal.h>
-#include <osmocom/mgcp/debug.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>

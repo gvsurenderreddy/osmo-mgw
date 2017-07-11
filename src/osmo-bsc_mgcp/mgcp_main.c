@@ -32,7 +32,6 @@
 
 #include <sys/socket.h>
 
-#include <osmocom/mgcp/debug.h>
 #include <osmocom/mgcp/mgcp.h>
 #include <osmocom/mgcp/mgcp_internal.h>
 #include <osmocom/mgcp/vty.h>
@@ -228,11 +227,6 @@ static struct vty_app_info vty_info = {
 };
 
 static const struct log_info_cat log_categories[] = {
-        [DLMGCP] = {
-                .name = "DLMGCP",
-                .description = "Media Gateway Control Protocol",
-                .enabled = 1, .loglevel = LOGL_NOTICE,
-        },
 };
 
 const struct log_info log_info = {

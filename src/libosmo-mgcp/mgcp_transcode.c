@@ -24,7 +24,6 @@
 
 #include "g711common.h"
 
-#include <osmocom/mgcp/debug.h>
 #include <osmocom/mgcp/mgcp.h>
 #include <osmocom/mgcp/mgcp_internal.h>
 #include <osmocom/mgcp/mgcp_transcode.h>
