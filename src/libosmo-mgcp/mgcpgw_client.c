@@ -23,10 +23,10 @@
 #include <osmocom/core/msgb.h>
 #include <osmocom/core/logging.h>
 
-#include <openbsc/mgcpgw_client.h>
-#include <openbsc/mgcp.h>
-#include <openbsc/mgcp_internal.h>
-#include <openbsc/debug.h>
+#include <osmocom/mgcp/mgcpgw_client.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/mgcp/debug.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>

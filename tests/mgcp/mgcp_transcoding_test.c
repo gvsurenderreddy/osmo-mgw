@@ -11,16 +11,16 @@
 
 #include <osmocom/netif/rtp.h>
 
-#include <openbsc/debug.h>
-#include <openbsc/mgcp.h>
-#include <openbsc/mgcp_internal.h>
+#include <osmocom/mgcp/debug.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/mgcp_internal.h>
 
 #include "bscconfig.h"
 #ifndef BUILD_MGCP_TRANSCODING
 #error "Requires MGCP transcoding enabled (see --enable-mgcp-transcoding)"
 #endif
 
-#include "openbsc/mgcp_transcode.h"
+#include <osmocom/mgcp/mgcp_transcode.h>
 
 uint8_t *audio_frame_l16[] = {
 };

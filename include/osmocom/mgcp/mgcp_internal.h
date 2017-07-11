@@ -143,7 +143,7 @@ enum mgcp_type {
 	MGCP_OSMUX_BSC_NAT,
 };
 
-#include <openbsc/osmux.h>
+#include <osmocom/mgcp/osmux.h>
 
 struct mgcp_endpoint {
 	int allocated;

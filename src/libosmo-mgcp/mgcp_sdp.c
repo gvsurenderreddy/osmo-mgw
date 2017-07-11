@@ -20,8 +20,8 @@
  *
  */
 
-#include <openbsc/mgcp.h>
-#include <openbsc/mgcp_internal.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/mgcp_internal.h>
 
 #include <errno.h>
 

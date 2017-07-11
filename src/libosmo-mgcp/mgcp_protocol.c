@@ -33,8 +33,8 @@
 #include <osmocom/core/talloc.h>
 #include <osmocom/core/select.h>
 
-#include <openbsc/mgcp.h>
-#include <openbsc/mgcp_internal.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/mgcp_internal.h>
 
 #define for_each_non_empty_line(line, save)			\
 	for (line = strtok_r(NULL, "\r\n", &save); line;\

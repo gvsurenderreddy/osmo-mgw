@@ -22,8 +22,8 @@
 
 #include <osmocom/core/msgb.h>
 #include <osmocom/core/application.h>
-#include <openbsc/mgcp.h>
-#include <openbsc/mgcpgw_client.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/mgcpgw_client.h>
 
 void *ctx;
 

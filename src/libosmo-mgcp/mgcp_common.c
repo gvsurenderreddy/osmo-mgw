@@ -23,7 +23,7 @@
 #include <errno.h>
 
 #include <osmocom/core/utils.h>
-#include <openbsc/mgcp.h>
+#include <osmocom/mgcp/mgcp.h>
 
 const struct value_string mgcp_connection_mode_strs[] = {
 	{ MGCP_CONN_NONE, "none" },

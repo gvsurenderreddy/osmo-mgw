@@ -24,10 +24,10 @@
 
 #include "g711common.h"
 
-#include <openbsc/debug.h>
-#include <openbsc/mgcp.h>
-#include <openbsc/mgcp_internal.h>
-#include <openbsc/mgcp_transcode.h>
+#include <osmocom/mgcp/debug.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/mgcp/mgcp_transcode.h>
 
 #include <osmocom/core/talloc.h>
 #include <osmocom/netif/rtp.h>

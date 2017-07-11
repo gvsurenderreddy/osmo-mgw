@@ -24,9 +24,9 @@
 
 #include <osmocom/core/talloc.h>
 
-#include <openbsc/mgcp.h>
-#include <openbsc/mgcp_internal.h>
-#include <openbsc/vty.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/mgcp/vty.h>
 
 #include <string.h>
 

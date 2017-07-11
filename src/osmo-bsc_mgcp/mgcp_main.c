@@ -32,10 +32,10 @@
 
 #include <sys/socket.h>
 
-#include <openbsc/debug.h>
-#include <openbsc/mgcp.h>
-#include <openbsc/mgcp_internal.h>
-#include <openbsc/vty.h>
+#include <osmocom/mgcp/debug.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/mgcp/vty.h>
 
 #include <osmocom/core/application.h>
 #include <osmocom/core/msgb.h>
@@ -54,7 +54,7 @@
 #include "../../bscconfig.h"
 
 #ifdef BUILD_MGCP_TRANSCODING
-#include "openbsc/mgcp_transcode.h"
+#include <osmocom/mgcp/mgcp_transcode.h>
 #endif
 
 #define _GNU_SOURCE
