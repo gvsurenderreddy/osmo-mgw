@@ -45,7 +45,7 @@ int mgcp_msg_terminate_nul(struct msgb *msg)
 	else if (tail[-1] == '\r' || tail[-1] == '\n')
 		tail[-1] = '\0';
 	else {
-		LOGP(DMGCP, LOGL_ERROR, "Cannot NUL terminate MGCP message: "
+		LOGP(DLMGCP, LOGL_ERROR, "Cannot NUL terminate MGCP message: "
 		     "Length: %d, Buffer size: %d\n",
 		     msgb_l2len(msg), msg->data_len);
 		return -ENOTSUP;

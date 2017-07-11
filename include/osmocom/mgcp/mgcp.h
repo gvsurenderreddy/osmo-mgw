@@ -274,7 +274,7 @@ struct msgb *mgcp_handle_message(struct mgcp_config *cfg, struct msgb *msg);
 static inline int mgcp_timeslot_to_endpoint(int multiplex, int timeslot)
 {
 	if (timeslot == 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Timeslot should not be 0\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Timeslot should not be 0\n");
 		timeslot = 255;
 	}
 

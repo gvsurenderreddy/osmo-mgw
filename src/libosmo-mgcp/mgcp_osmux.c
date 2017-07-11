@@ -61,7 +61,7 @@ osmux_handle_find_get(struct in_addr *addr, int rem_port)
 	llist_for_each_entry(h, &osmux_handle_list, head) {
 		if (memcmp(&h->rem_addr, addr, sizeof(struct in_addr)) == 0 &&
 		    h->rem_port == rem_port) {
-			LOGP(DMGCP, LOGL_DEBUG, "using existing OSMUX handle "
+			LOGP(DLMGCP, LOGL_DEBUG, "using existing OSMUX handle "
 						"for addr=%s:%d\n",
 				inet_ntoa(*addr), ntohs(rem_port));
 			h->refcnt++;
@@ -80,11 +80,11 @@ static void osmux_handle_put(struct osmux_in_handle *in)
 	llist_for_each_entry(h, &osmux_handle_list, head) {
 		if (h->in == in) {
 			if (--h->refcnt == 0) {
-				LOGP(DMGCP, LOGL_INFO,
+				LOGP(DLMGCP, LOGL_INFO,
 				     "Releasing unused osmux handle for %s:%d\n",
 				     inet_ntoa(h->rem_addr),
 				     ntohs(h->rem_port));
-				LOGP(DMGCP, LOGL_INFO, "Stats: "
+				LOGP(DLMGCP, LOGL_INFO, "Stats: "
 				     "input RTP msgs: %u bytes: %"PRIu64" "
 				     "output osmux msgs: %u bytes: %"PRIu64"\n",
 				     in->stats.input_rtp_msgs,
@@ -98,7 +98,7 @@ static void osmux_handle_put(struct osmux_in_handle *in)
 			return;
 		}
 	}
-	LOGP(DMGCP, LOGL_ERROR, "cannot find Osmux input handle %p\n", in);
+	LOGP(DLMGCP, LOGL_ERROR, "cannot find Osmux input handle %p\n", in);
 }
 
 static struct osmux_handle *
@@ -129,7 +129,7 @@ osmux_handle_alloc(struct mgcp_config *cfg, struct in_addr *addr, int rem_port)
 
 	llist_add(&h->head, &osmux_handle_list);
 
-	LOGP(DMGCP, LOGL_DEBUG, "created new OSMUX handle for addr=%s:%d\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "created new OSMUX handle for addr=%s:%d\n",
 		inet_ntoa(*addr), ntohs(rem_port));
 
 	return h;
@@ -195,7 +195,7 @@ endpoint_lookup(struct mgcp_config *cfg, int cid,
 			break;
 		default:
 			/* Should not ever happen */
-			LOGP(DMGCP, LOGL_ERROR, "Bad type %d. Fix your code.\n", type);
+			LOGP(DLMGCP, LOGL_ERROR, "Bad type %d. Fix your code.\n", type);
 			return NULL;
 		}
 
@@ -203,7 +203,7 @@ endpoint_lookup(struct mgcp_config *cfg, int cid,
 			return tmp;
 	}
 
-	LOGP(DMGCP, LOGL_ERROR, "Cannot find endpoint with cid=%d\n", cid);
+	LOGP(DLMGCP, LOGL_ERROR, "Cannot find endpoint with cid=%d\n", cid);
 
 	return NULL;
 }
@@ -246,14 +246,14 @@ static struct msgb *osmux_recv(struct osmo_fd *ofd, struct sockaddr_in *addr)
 
 	msg = msgb_alloc(4096, "OSMUX");
 	if (!msg) {
-		LOGP(DMGCP, LOGL_ERROR, "cannot allocate message\n");
+		LOGP(DLMGCP, LOGL_ERROR, "cannot allocate message\n");
 		return NULL;
 	}
 	ret = recvfrom(ofd->fd, msg->data, msg->data_len, 0,
 			(struct sockaddr *)addr, &slen);
 	if (ret <= 0) {
 		msgb_free(msg);
-		LOGP(DMGCP, LOGL_ERROR, "cannot receive message\n");
+		LOGP(DLMGCP, LOGL_ERROR, "cannot receive message\n");
 		return NULL;
 	}
 	msgb_put(msg, ret);
@@ -288,7 +288,7 @@ int osmux_read_from_bsc_nat_cb(struct osmo_fd *ofd, unsigned int what)
 		endp = endpoint_lookup(cfg, osmuxh->circuit_id,
 				       &addr.sin_addr, MGCP_DEST_NET);
 		if (!endp) {
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 			     "Cannot find an endpoint for circuit_id=%d\n",
 			     osmuxh->circuit_id);
 			goto out;
@@ -313,16 +313,16 @@ static int osmux_handle_dummy(struct mgcp_config *cfg, struct sockaddr_in *addr,
 	uint8_t osmux_cid;
 
 	if (msg->len < 1 + sizeof(osmux_cid)) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Discarding truncated Osmux dummy load\n");
 		goto out;
 	}
 
-	LOGP(DMGCP, LOGL_DEBUG, "Received Osmux dummy load from %s\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "Received Osmux dummy load from %s\n",
 	     inet_ntoa(addr->sin_addr));
 
 	if (!cfg->osmux) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "bsc wants to use Osmux but bsc-nat did not request it\n");
 		goto out;
 	}
@@ -332,7 +332,7 @@ static int osmux_handle_dummy(struct mgcp_config *cfg, struct sockaddr_in *addr,
 
 	endp = endpoint_lookup(cfg, osmux_cid, &addr->sin_addr, MGCP_DEST_BTS);
 	if (!endp) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Cannot find endpoint for Osmux CID %d\n", osmux_cid);
 		goto out;
 	}
@@ -342,13 +342,13 @@ static int osmux_handle_dummy(struct mgcp_config *cfg, struct sockaddr_in *addr,
 
 	if (osmux_enable_endpoint(endp, OSMUX_ROLE_BSC_NAT,
 				  &addr->sin_addr, addr->sin_port) < 0 ){
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Could not enable osmux in endpoint %d\n",
 		     ENDPOINT_NUMBER(endp));
 		goto out;
 	}
 
-	LOGP(DMGCP, LOGL_INFO, "Enabling osmux in endpoint %d for %s:%u\n",
+	LOGP(DLMGCP, LOGL_INFO, "Enabling osmux in endpoint %d for %s:%u\n",
 	     ENDPOINT_NUMBER(endp), inet_ntoa(addr->sin_addr),
 	     ntohs(addr->sin_port));
 out:
@@ -381,7 +381,7 @@ int osmux_read_from_bsc_cb(struct osmo_fd *ofd, unsigned int what)
 		endp = endpoint_lookup(cfg, osmuxh->circuit_id,
 				       &addr.sin_addr, MGCP_DEST_BTS);
 		if (!endp) {
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 			     "Cannot find an endpoint for circuit_id=%d\n",
 			     osmuxh->circuit_id);
 			goto out;
@@ -410,14 +410,14 @@ int osmux_init(int role, struct mgcp_config *cfg)
 		osmux_fd.cb = osmux_read_from_bsc_cb;
 		break;
 	default:
-		LOGP(DMGCP, LOGL_ERROR, "wrong role for OSMUX\n");
+		LOGP(DLMGCP, LOGL_ERROR, "wrong role for OSMUX\n");
 		return -1;
 	}
 	osmux_fd.data = cfg;
 
 	ret = mgcp_create_bind(cfg->osmux_addr, &osmux_fd, cfg->osmux_port);
 	if (ret < 0) {
-		LOGP(DMGCP, LOGL_ERROR, "cannot bind OSMUX socket\n");
+		LOGP(DLMGCP, LOGL_ERROR, "cannot bind OSMUX socket\n");
 		return ret;
 	}
 	mgcp_set_ip_tos(osmux_fd.fd, cfg->endp_dscp);
@@ -425,7 +425,7 @@ int osmux_init(int role, struct mgcp_config *cfg)
 
 	ret = osmo_fd_register(&osmux_fd);
 	if (ret < 0) {
-		LOGP(DMGCP, LOGL_ERROR, "cannot register OSMUX socket\n");
+		LOGP(DLMGCP, LOGL_ERROR, "cannot register OSMUX socket\n");
 		return ret;
 	}
 	cfg->osmux_init = 1;
@@ -448,7 +448,7 @@ int osmux_enable_endpoint(struct mgcp_endpoint *endp, int role,
 	static const uint32_t rtp_ssrc_winlen = UINT32_MAX / 256;
 
 	if (endp->osmux.state == OSMUX_STATE_DISABLED) {
-		LOGP(DMGCP, LOGL_ERROR, "Endpoint %u didn't request Osmux\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Endpoint %u didn't request Osmux\n",
 		     ENDPOINT_NUMBER(endp));
 		return -1;
 	}
@@ -459,12 +459,12 @@ int osmux_enable_endpoint(struct mgcp_endpoint *endp, int role,
 
 	endp->osmux.in = osmux_handle_lookup(endp->cfg, addr, port);
 	if (!endp->osmux.in) {
-		LOGP(DMGCP, LOGL_ERROR, "Cannot allocate input osmux handle\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Cannot allocate input osmux handle\n");
 		return -1;
 	}
 	if (!osmux_xfrm_input_open_circuit(endp->osmux.in, endp->osmux.cid,
 					   endp->cfg->osmux_dummy)) {
-		LOGP(DMGCP, LOGL_ERROR, "Cannot open osmux circuit %u\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Cannot open osmux circuit %u\n",
 		     endp->osmux.cid);
 		return -1;
 	}
@@ -484,7 +484,7 @@ int osmux_enable_endpoint(struct mgcp_endpoint *endp, int role,
 
 void osmux_disable_endpoint(struct mgcp_endpoint *endp)
 {
-	LOGP(DMGCP, LOGL_INFO, "Releasing endpoint %u using Osmux CID %u\n",
+	LOGP(DLMGCP, LOGL_INFO, "Releasing endpoint %u using Osmux CID %u\n",
 	     ENDPOINT_NUMBER(endp), endp->osmux.cid);
 	osmux_xfrm_input_close_circuit(endp->osmux.in, endp->osmux.cid);
 	endp->osmux.state = OSMUX_STATE_DISABLED;
@@ -525,16 +525,16 @@ int osmux_send_dummy(struct mgcp_endpoint *endp)
 		if (osmux_enable_endpoint(endp, OSMUX_ROLE_BSC,
 					  &endp->net_end.addr,
 					  htons(endp->cfg->osmux_port)) < 0) {
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 			     "Could not activate osmux in endpoint %d\n",
 			     ENDPOINT_NUMBER(endp));
 		}
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Osmux CID %u for %s:%u is now enabled\n",
 		     endp->osmux.cid, inet_ntoa(endp->net_end.addr),
 		     endp->cfg->osmux_port);
 	}
-	LOGP(DMGCP, LOGL_DEBUG,
+	LOGP(DLMGCP, LOGL_DEBUG,
 	     "sending OSMUX dummy load to %s CID %u\n",
 	     inet_ntoa(endp->net_end.addr), endp->osmux.cid);
 
@@ -569,18 +569,18 @@ int osmux_get_cid(void)
 				continue;
 
 			osmux_cid_bitmap[i] |= (1 << j);
-			LOGP(DMGCP, LOGL_DEBUG,
+			LOGP(DLMGCP, LOGL_DEBUG,
 			     "Allocating Osmux CID %u from pool\n", (i * 8) + j);
 			return (i * 8) + j;
 		}
 	}
 
-	LOGP(DMGCP, LOGL_ERROR, "All Osmux circuits are in use!\n");
+	LOGP(DLMGCP, LOGL_ERROR, "All Osmux circuits are in use!\n");
 	return -1;
 }
 
 void osmux_put_cid(uint8_t osmux_cid)
 {
-	LOGP(DMGCP, LOGL_DEBUG, "Osmux CID %u is back to the pool\n", osmux_cid);
+	LOGP(DLMGCP, LOGL_DEBUG, "Osmux CID %u is back to the pool\n", osmux_cid);
 	osmux_cid_bitmap[osmux_cid / 8] &= ~(1 << (osmux_cid % 8));
 }

@@ -112,14 +112,14 @@ static void mgcpgw_client_handle_response(struct mgcpgw_client *mgcp,
 					  struct mgcp_response *response)
 {
 	if (!pending) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Cannot handle NULL response\n");
 		return;
 	}
 	if (pending->response_cb)
 		pending->response_cb(response, pending->priv);
 	else
-		LOGP(DMGCP, LOGL_INFO, "MGCP response ignored (NULL cb)\n");
+		LOGP(DLMGCP, LOGL_INFO, "MGCP response ignored (NULL cb)\n");
 	talloc_free(pending);
 }
 
@@ -150,7 +150,7 @@ static int mgcp_response_parse_head(struct mgcp_response *r, struct msgb *msg)
 	return 0;
 
 response_parse_failure:
-	LOGP(DMGCP, LOGL_ERROR,
+	LOGP(DLMGCP, LOGL_ERROR,
 	     "Failed to parse MGCP response header\n");
 	return -EINVAL;
 }
@@ -164,7 +164,7 @@ static bool mgcp_line_is_valid(const char *line)
 
 	if (line_len < 2
 	    || line[1] != '=') {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Wrong MGCP option format: '%s'\n",
 		     line);
 		return false;
@@ -183,7 +183,7 @@ static int mgcp_parse_audio(struct mgcp_response *r, const char *line)
 	return 0;
 
 response_parse_failure:
-	LOGP(DMGCP, LOGL_ERROR,
+	LOGP(DLMGCP, LOGL_ERROR,
 	     "Failed to parse MGCP response header\n");
 	return -EINVAL;
 }
@@ -196,7 +196,7 @@ int mgcp_response_parse_params(struct mgcp_response *r)
 	char *data = strstr(r->body, "\n\n");
 
 	if (!data) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "MGCP response: cannot find start of parameters\n");
 		return -EINVAL;
 	}
@@ -255,13 +255,13 @@ int mgcpgw_client_rx(struct mgcpgw_client *mgcp, struct msgb *msg)
 
 	rc = mgcp_response_parse_head(&r, msg);
 	if (rc) {
-		LOGP(DMGCP, LOGL_ERROR, "Cannot parse MGCP response\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Cannot parse MGCP response\n");
 		return -1;
 	}
 
 	pending = mgcpgw_client_response_pending_get(mgcp, &r);
 	if (!pending) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Cannot find matching MGCP transaction for trans_id %d\n",
 		     r.head.trans_id);
 		return -1;
@@ -279,17 +279,17 @@ static int mgcp_do_read(struct osmo_fd *fd)
 
 	msg = msgb_alloc_headroom(4096, 128, "mgcp_from_gw");
 	if (!msg) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to allocate MGCP message.\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to allocate MGCP message.\n");
 		return -1;
 	}
 
 	ret = read(fd->fd, msg->data, 4096 - 128);
 	if (ret <= 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to read: %d/%s\n", errno, strerror(errno));
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to read: %d/%s\n", errno, strerror(errno));
 		msgb_free(msg);
 		return -1;
 	} else if (ret > 4096 - 128) {
-		LOGP(DMGCP, LOGL_ERROR, "Too much data: %d\n", ret);
+		LOGP(DLMGCP, LOGL_ERROR, "Too much data: %d\n", ret);
 		msgb_free(msg);
 		return -1;
         }
@@ -314,13 +314,13 @@ static int mgcp_do_write(struct osmo_fd *fd, struct msgb *msg)
 			break;
 		}
 	}
-	DEBUGP(DMGCP, "Tx MGCP msg to MGCP GW: '%s'\n", strbuf);
+	DEBUGP(DLMGCP, "Tx MGCP msg to MGCP GW: '%s'\n", strbuf);
 
-	LOGP(DMGCP, LOGL_DEBUG, "Sending msg to MGCP GW size: %u\n", msg->len);
+	LOGP(DLMGCP, LOGL_DEBUG, "Sending msg to MGCP GW size: %u\n", msg->len);
 
 	ret = write(fd->fd, msg->data, msg->len);
 	if (ret != msg->len)
-		LOGP(DMGCP, LOGL_ERROR, "Failed to forward message to MGCP"
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to forward message to MGCP"
 		     " GW: %s\n", strerror(errno));
 
 	return ret;
@@ -363,7 +363,7 @@ int mgcpgw_client_connect(struct mgcpgw_client *mgcp)
 	int rc;
 
 	if (!mgcp) {
-		LOGP(DMGCP, LOGL_FATAL, "MGCPGW client not initialized properly\n");
+		LOGP(DLMGCP, LOGL_FATAL, "MGCPGW client not initialized properly\n");
 		return -EINVAL;
 	}
 
@@ -371,13 +371,13 @@ int mgcpgw_client_connect(struct mgcpgw_client *mgcp)
 
 	wq->bfd.fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (wq->bfd.fd < 0) {
-		LOGP(DMGCP, LOGL_FATAL, "Failed to create UDP socket errno: %d\n", errno);
+		LOGP(DLMGCP, LOGL_FATAL, "Failed to create UDP socket errno: %d\n", errno);
 		return -errno;
 	}
 
 	on = 1;
 	if (setsockopt(wq->bfd.fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
-		LOGP(DMGCP, LOGL_FATAL,
+		LOGP(DLMGCP, LOGL_FATAL,
 		     "Failed to initialize socket for MGCP GW: %s\n",
 		     strerror(errno));
 		rc = -errno;
@@ -390,7 +390,7 @@ int mgcpgw_client_connect(struct mgcpgw_client *mgcp)
 	inet_aton(mgcp->actual.local_addr, &addr.sin_addr);
 	addr.sin_port = htons(mgcp->actual.local_port);
 	if (bind(wq->bfd.fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-		LOGP(DMGCP, LOGL_FATAL,
+		LOGP(DLMGCP, LOGL_FATAL,
 		     "Failed to bind for MGCP GW to %s %u\n",
 		     mgcp->actual.local_addr, mgcp->actual.local_port);
 		rc = -errno;
@@ -401,7 +401,7 @@ int mgcpgw_client_connect(struct mgcpgw_client *mgcp)
 	inet_aton(mgcp->actual.remote_addr, &addr.sin_addr);
 	addr.sin_port = htons(mgcp->actual.remote_port);
 	if (connect(wq->bfd.fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		LOGP(DMGCP, LOGL_FATAL,
+		LOGP(DLMGCP, LOGL_FATAL,
 		     "Failed to connect to MGCP GW at %s %u: %s\n",
 		     mgcp->actual.remote_addr, mgcp->actual.remote_port,
 		     strerror(errno));
@@ -418,11 +418,11 @@ int mgcpgw_client_connect(struct mgcpgw_client *mgcp)
 	wq->write_cb = mgcp_do_write;
 
 	if (osmo_fd_register(&wq->bfd) != 0) {
-		LOGP(DMGCP, LOGL_FATAL, "Failed to register BFD\n");
+		LOGP(DLMGCP, LOGL_FATAL, "Failed to register BFD\n");
 		rc = -EIO;
 		goto error_close_fd;
 	}
-	LOGP(DMGCP, LOGL_INFO, "MGCP GW connection: %s:%u -> %s:%u\n",
+	LOGP(DLMGCP, LOGL_INFO, "MGCP GW connection: %s:%u -> %s:%u\n",
 	     mgcp->actual.local_addr, mgcp->actual.local_port,
 	     mgcp->actual.remote_addr, mgcp->actual.remote_port);
 
@@ -480,7 +480,7 @@ int mgcpgw_client_tx(struct mgcpgw_client *mgcp, struct msgb *msg,
 
 	trans_id = msg->cb[MSGB_CB_MGCP_TRANS_ID];
 	if (!trans_id) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Unset transaction id in mgcp send request\n");
 		talloc_free(msg);
 		return -EINVAL;
@@ -489,7 +489,7 @@ int mgcpgw_client_tx(struct mgcpgw_client *mgcp, struct msgb *msg,
 	pending = mgcpgw_client_pending_add(mgcp, trans_id, response_cb, priv);
 
 	if (msgb_l2len(msg) > 4096) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Cannot send, MGCP message too large: %u\n",
 		     msgb_l2len(msg));
 		msgb_free(msg);
@@ -499,11 +499,11 @@ int mgcpgw_client_tx(struct mgcpgw_client *mgcp, struct msgb *msg,
 
 	rc = osmo_wqueue_enqueue(&mgcp->wq, msg);
 	if (rc) {
-		LOGP(DMGCP, LOGL_FATAL, "Could not queue message to MGCP GW\n");
+		LOGP(DLMGCP, LOGL_FATAL, "Could not queue message to MGCP GW\n");
 		msgb_free(msg);
 		goto mgcp_tx_error;
 	} else
-		LOGP(DMGCP, LOGL_INFO, "Queued %u bytes for MGCP GW\n",
+		LOGP(DLMGCP, LOGL_INFO, "Queued %u bytes for MGCP GW\n",
 		     msgb_l2len(msg));
 	return 0;
 
@@ -519,7 +519,7 @@ static struct msgb *mgcp_msg_from_buf(mgcp_trans_id_t trans_id,
 	struct msgb *msg;
 
 	if (len > (4096 - 128)) {
-		LOGP(DMGCP, LOGL_ERROR, "Cannot send to MGCP GW:"
+		LOGP(DLMGCP, LOGL_ERROR, "Cannot send to MGCP GW:"
 		     " message too large: %d\n", len);
 		return NULL;
 	}
@@ -547,13 +547,13 @@ static struct msgb *mgcp_msg_from_str(mgcp_trans_id_t trans_id,
 	len = vsnprintf(compose, sizeof(compose), fmt, ap);
 	va_end(ap);
 	if (len >= sizeof(compose)) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Message too large: trans_id=%u len=%d\n",
 		     trans_id, len);
 		return NULL;
 	}
 	if (len < 1) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Failed to compose message: trans_id=%u len=%d\n",
 		     trans_id, len);
 		return NULL;

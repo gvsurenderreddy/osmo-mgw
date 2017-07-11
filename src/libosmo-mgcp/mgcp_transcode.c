@@ -171,7 +171,7 @@ int mgcp_transcoding_setup(struct mgcp_endpoint *endp,
 	const struct mgcp_rtp_codec *src_codec = &src_end->codec;
 
 	if (endp->tcfg->no_audio_transcoding) {
-		LOGP(DMGCP, LOGL_NOTICE,
+		LOGP(DLMGCP, LOGL_NOTICE,
 			"Transcoding disabled on endpoint 0x%x\n",
 			ENDPOINT_NUMBER(endp));
 		return 0;
@@ -180,7 +180,7 @@ int mgcp_transcoding_setup(struct mgcp_endpoint *endp,
 	src_fmt = get_audio_format(src_codec);
 	dst_fmt = get_audio_format(dst_codec);
 
-	LOGP(DMGCP, LOGL_ERROR,
+	LOGP(DLMGCP, LOGL_ERROR,
 	     "Checking transcoding: %s (%d) -> %s (%d)\n",
 	     src_codec->subtype_name, src_codec->payload_type,
 	     dst_codec->subtype_name, dst_codec->payload_type);
@@ -194,7 +194,7 @@ int mgcp_transcoding_setup(struct mgcp_endpoint *endp,
 			/* Nothing to do */
 			return 0;
 
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Cannot transcode: %s codec not supported (%s -> %s).\n",
 		     src_fmt != AF_INVALID ? "destination" : "source",
 		     src_codec->audio_name, dst_codec->audio_name);
@@ -202,7 +202,7 @@ int mgcp_transcoding_setup(struct mgcp_endpoint *endp,
 	}
 
 	if (src_codec->rate && dst_codec->rate && src_codec->rate != dst_codec->rate) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Cannot transcode: rate conversion (%d -> %d) not supported.\n",
 		     src_codec->rate, dst_codec->rate);
 		return -EINVAL;
@@ -225,7 +225,7 @@ int mgcp_transcoding_setup(struct mgcp_endpoint *endp,
 		state->src_samples_per_frame = 160;
 		state->src.gsm_handle = gsm_create();
 		if (!state->src.gsm_handle) {
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 			     "Failed to initialize GSM decoder.\n");
 			return -EINVAL;
 		}
@@ -236,7 +236,7 @@ int mgcp_transcoding_setup(struct mgcp_endpoint *endp,
 		state->src_samples_per_frame = 80;
 		state->src.g729_dec = initBcg729DecoderChannel();
 		if (!state->src.g729_dec) {
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 			     "Failed to initialize G.729 decoder.\n");
 			return -EINVAL;
 		}
@@ -264,7 +264,7 @@ int mgcp_transcoding_setup(struct mgcp_endpoint *endp,
 		state->dst_samples_per_frame = 160;
 		state->dst.gsm_handle = gsm_create();
 		if (!state->dst.gsm_handle) {
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 			     "Failed to initialize GSM encoder.\n");
 			return -EINVAL;
 		}
@@ -275,7 +275,7 @@ int mgcp_transcoding_setup(struct mgcp_endpoint *endp,
 		state->dst_samples_per_frame = 80;
 		state->dst.g729_enc = initBcg729EncoderChannel();
 		if (!state->dst.g729_enc) {
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 			     "Failed to initialize G.729 decoder.\n");
 			return -EINVAL;
 		}
@@ -293,7 +293,7 @@ int mgcp_transcoding_setup(struct mgcp_endpoint *endp,
 	if (dst_end->force_output_ptime)
 		state->dst_packet_duration = mgcp_rtp_packet_duration(endp, dst_end);
 
-	LOGP(DMGCP, LOGL_INFO,
+	LOGP(DLMGCP, LOGL_INFO,
 	     "Initialized RTP processing on: 0x%x "
 	     "conv: %d (%d, %d, %s) -> %d (%d, %d, %s)\n",
 	     ENDPOINT_NUMBER(endp),
@@ -329,7 +329,7 @@ static int decode_audio(struct mgcp_process_rtp_state *state,
 {
 	while (*nbytes >= state->src_frame_size) {
 		if (state->sample_cnt + state->src_samples_per_frame > ARRAY_SIZE(state->samples)) {
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 			     "Sample buffer too small: %zu > %zu.\n",
 			     state->sample_cnt + state->src_samples_per_frame,
 			     ARRAY_SIZE(state->samples));
@@ -339,7 +339,7 @@ static int decode_audio(struct mgcp_process_rtp_state *state,
 		case AF_GSM:
 			if (gsm_decode(state->src.gsm_handle,
 				       (gsm_byte *)*src, state->samples + state->sample_cnt) < 0) {
-				LOGP(DMGCP, LOGL_ERROR,
+				LOGP(DLMGCP, LOGL_ERROR,
 				     "Failed to decode GSM.\n");
 				return -EINVAL;
 			}
@@ -387,7 +387,7 @@ static int encode_audio(struct mgcp_process_rtp_state *state,
 				break;
 
 			/* Not even one frame fits into the buffer */
-			LOGP(DMGCP, LOGL_INFO,
+			LOGP(DLMGCP, LOGL_INFO,
 			     "Encoding (RTP) buffer too small: %zu > %zu.\n",
 			     nbytes + state->dst_frame_size, buf_size);
 			return -ENOSPC;
@@ -539,13 +539,13 @@ int mgcp_transcoding_process_rtp(struct mgcp_endpoint *endp,
 				 * TODO: This can be improved by adding silence
 				 * instead if the delta is small enough.
 				 */
-				LOGP(DMGCP, LOGL_NOTICE,
+				LOGP(DLMGCP, LOGL_NOTICE,
 					"0x%x dropping sample buffer due delta=%d sample_cnt=%zu\n",
 					ENDPOINT_NUMBER(endp), delta, state->sample_cnt);
 				state->sample_cnt = 0;
 				state->next_time = ts_no;
 			} else if (delta < 0) {
-				LOGP(DMGCP, LOGL_NOTICE,
+				LOGP(DLMGCP, LOGL_NOTICE,
 				     "RTP time jumps backwards, delta = %d, "
 				     "discarding buffered samples\n",
 				     delta);
@@ -568,7 +568,7 @@ int mgcp_transcoding_process_rtp(struct mgcp_endpoint *endp,
 		decode_audio(state, &src, &nbytes);
 
 		if (nbytes > 0)
-			LOGP(DMGCP, LOGL_NOTICE,
+			LOGP(DLMGCP, LOGL_NOTICE,
 			     "Skipped audio frame in RTP packet: %zu octets\n",
 			     nbytes);
 	} else

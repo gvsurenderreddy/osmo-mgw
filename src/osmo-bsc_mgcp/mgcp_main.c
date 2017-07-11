@@ -175,7 +175,7 @@ static int read_call_agent(struct osmo_fd *fd, unsigned int what)
 	}
 
 	if (reset_endpoints) {
-		LOGP(DMGCP, LOGL_NOTICE,
+		LOGP(DLMGCP, LOGL_NOTICE,
 		     "Asked to reset endpoints: %d/%d\n",
 		     reset_trunk->trunk_nr, reset_trunk->trunk_type);
 		reset_endpoints = 0;
@@ -228,8 +228,8 @@ static struct vty_app_info vty_info = {
 };
 
 static const struct log_info_cat log_categories[] = {
-        [DMGCP] = {
-                .name = "DMGCP",
+        [DLMGCP] = {
+                .name = "DLMGCP",
                 .description = "Media Gateway Control Protocol",
                 .enabled = 1, .loglevel = LOGL_NOTICE,
         },
@@ -317,7 +317,7 @@ int main(int argc, char **argv)
 			addr.sin_port = htons(2727);
 			inet_aton(cfg->call_agent_addr, &addr.sin_addr);
 			if (connect(cfg->gw_fd.bfd.fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-				LOGP(DMGCP, LOGL_ERROR, "Failed to connect to: '%s'. errno: %d\n",
+				LOGP(DLMGCP, LOGL_ERROR, "Failed to connect to: '%s'. errno: %d\n",
 				     cfg->call_agent_addr, errno);
 				close(cfg->gw_fd.bfd.fd);
 				cfg->gw_fd.bfd.fd = -1;
@@ -326,11 +326,11 @@ int main(int argc, char **argv)
 		}
 
 		if (osmo_fd_register(&cfg->gw_fd.bfd) != 0) {
-			LOGP(DMGCP, LOGL_FATAL, "Failed to register the fd\n");
+			LOGP(DLMGCP, LOGL_FATAL, "Failed to register the fd\n");
 			return -1;
 		}
 
-		LOGP(DMGCP, LOGL_NOTICE, "Configured for MGCP.\n");
+		LOGP(DLMGCP, LOGL_NOTICE, "Configured for MGCP.\n");
 	}
 
 	/* initialisation */

@@ -70,7 +70,7 @@ static int mgcp_check_param(const struct mgcp_endpoint *endp, const char *line)
 {
 	const size_t line_len = strlen(line);
 	if (line[0] != '\0' && line_len < 2) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 			"Wrong MGCP option format: '%s' on 0x%x\n",
 			line, ENDPOINT_NUMBER(endp));
 		return 0;
@@ -120,7 +120,7 @@ static struct msgb *mgcp_msgb_alloc(void)
 	struct msgb *msg;
 	msg = msgb_alloc_headroom(4096, 128, "MGCP msg");
 	if (!msg)
-	    LOGP(DMGCP, LOGL_ERROR, "Failed to msgb for MGCP data.\n");
+	    LOGP(DLMGCP, LOGL_ERROR, "Failed to msgb for MGCP data.\n");
 
 	return msg;
 }
@@ -151,13 +151,13 @@ static struct msgb *create_resp(struct mgcp_endpoint *endp, int code,
 	len = snprintf((char *) res->data, 2048, "%d %s%s%s\r\n%s",
 			code, trans, txt, param ? param : "", sdp ? sdp : "");
 	if (len < 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to sprintf MGCP response.\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to sprintf MGCP response.\n");
 		msgb_free(res);
 		return NULL;
 	}
 
 	res->l2h = msgb_put(res, len);
-	LOGP(DMGCP, LOGL_DEBUG, "Generated response: code: %d for '%s'\n", code, res->l2h);
+	LOGP(DLMGCP, LOGL_DEBUG, "Generated response: code: %d for '%s'\n", code, res->l2h);
 
 	/*
 	 * Remember the last transmission per endpoint.
@@ -260,7 +260,7 @@ static int write_response_sdp(struct mgcp_endpoint *endp,
 	return len;
 
 buffer_too_small:
-	LOGP(DMGCP, LOGL_ERROR, "SDP buffer too small: %zu (needed %d)\n",
+	LOGP(DLMGCP, LOGL_ERROR, "SDP buffer too small: %zu (needed %d)\n",
 	     size, len);
 	return -1;
 }
@@ -320,7 +320,7 @@ struct msgb *mgcp_handle_message(struct mgcp_config *cfg, struct msgb *msg)
 	char *data;
 
 	if (msgb_l2len(msg) < 4) {
-		LOGP(DMGCP, LOGL_ERROR, "msg too short: %d\n", msg->len);
+		LOGP(DLMGCP, LOGL_ERROR, "msg too short: %d\n", msg->len);
 		return NULL;
 	}
 
@@ -329,7 +329,7 @@ struct msgb *mgcp_handle_message(struct mgcp_config *cfg, struct msgb *msg)
 
         /* attempt to treat it as a response */
         if (sscanf((const char *)&msg->l2h[0], "%3d %*s", &code) == 1) {
-		LOGP(DMGCP, LOGL_DEBUG, "Response: Code: %d\n", code);
+		LOGP(DLMGCP, LOGL_DEBUG, "Response: Code: %d\n", code);
 		return NULL;
 	}
 
@@ -358,7 +358,7 @@ struct msgb *mgcp_handle_message(struct mgcp_config *cfg, struct msgb *msg)
 	}
 
 	if (!handled)
-		LOGP(DMGCP, LOGL_NOTICE, "MSG with type: '%.4s' not handled\n", &msg->l2h[0]);
+		LOGP(DLMGCP, LOGL_NOTICE, "MSG with type: '%.4s' not handled\n", &msg->l2h[0]);
 
 	return resp;
 }
@@ -377,13 +377,13 @@ static struct mgcp_endpoint *find_e1_endpoint(struct mgcp_config *cfg,
 
 	trunk = strtoul(mgcp + 6, &rest, 10);
 	if (rest == NULL || rest[0] != '/' || trunk < 1) {
-		LOGP(DMGCP, LOGL_ERROR, "Wrong trunk name '%s'\n", mgcp);
+		LOGP(DLMGCP, LOGL_ERROR, "Wrong trunk name '%s'\n", mgcp);
 		return NULL;
 	}
 
 	endp = strtoul(rest + 1, &rest, 10);
 	if (rest == NULL || rest[0] != '@') {
-		LOGP(DMGCP, LOGL_ERROR, "Wrong endpoint name '%s'\n", mgcp);
+		LOGP(DLMGCP, LOGL_ERROR, "Wrong endpoint name '%s'\n", mgcp);
 		return NULL;
 	}
 
@@ -393,17 +393,17 @@ static struct mgcp_endpoint *find_e1_endpoint(struct mgcp_config *cfg,
 
 	tcfg = mgcp_trunk_num(cfg, trunk);
 	if (!tcfg) {
-		LOGP(DMGCP, LOGL_ERROR, "The trunk %d is not declared.\n", trunk);
+		LOGP(DLMGCP, LOGL_ERROR, "The trunk %d is not declared.\n", trunk);
 		return NULL;
 	}
 
 	if (!tcfg->endpoints) {
-		LOGP(DMGCP, LOGL_ERROR, "Endpoints of trunk %d not allocated.\n", trunk);
+		LOGP(DLMGCP, LOGL_ERROR, "Endpoints of trunk %d not allocated.\n", trunk);
 		return NULL;
 	}
 
 	if (endp < 1 || endp >= tcfg->number_endpoints) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to find endpoint '%s'\n", mgcp);
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to find endpoint '%s'\n", mgcp);
 		return NULL;
 	}
 
@@ -422,7 +422,7 @@ static struct mgcp_endpoint *find_endpoint(struct mgcp_config *cfg, const char *
 	if (gw > 0 && gw < cfg->trunk.number_endpoints && endptr[0] == '@')
 		return &cfg->trunk.endpoints[gw];
 
-	LOGP(DMGCP, LOGL_ERROR, "Not able to find the endpoint: '%s'\n", mgcp);
+	LOGP(DLMGCP, LOGL_ERROR, "Not able to find the endpoint: '%s'\n", mgcp);
 	return NULL;
 }
 
@@ -447,21 +447,21 @@ static int mgcp_analyze_header(struct mgcp_parse_data *pdata, char *data)
 		case 1:
 			pdata->endp = find_endpoint(pdata->cfg, elem);
 			if (!pdata->endp) {
-				LOGP(DMGCP, LOGL_ERROR,
+				LOGP(DLMGCP, LOGL_ERROR,
 				     "Unable to find Endpoint `%s'\n", elem);
 				return -1;
 			}
 			break;
 		case 2:
 			if (strcmp("MGCP", elem)) {
-				LOGP(DMGCP, LOGL_ERROR,
+				LOGP(DLMGCP, LOGL_ERROR,
 				     "MGCP header parsing error\n");
 				return -1;
 			}
 			break;
 		case 3:
 			if (strcmp("1.0", elem)) {
-				LOGP(DMGCP, LOGL_ERROR, "MGCP version `%s' "
+				LOGP(DLMGCP, LOGL_ERROR, "MGCP version `%s' "
 					"not supported\n", elem);
 				return -1;
 			}
@@ -471,7 +471,7 @@ static int mgcp_analyze_header(struct mgcp_parse_data *pdata, char *data)
 	}
 
 	if (i != 4) {
-		LOGP(DMGCP, LOGL_ERROR, "MGCP status line too short.\n");
+		LOGP(DLMGCP, LOGL_ERROR, "MGCP status line too short.\n");
 		pdata->trans = "000000";
 		pdata->endp = NULL;
 		return -1;
@@ -484,7 +484,7 @@ static int verify_call_id(const struct mgcp_endpoint *endp,
 			  const char *callid)
 {
 	if (strcmp(endp->callid, callid) != 0) {
-		LOGP(DMGCP, LOGL_ERROR, "CallIDs does not match on 0x%x. '%s' != '%s'\n",
+		LOGP(DLMGCP, LOGL_ERROR, "CallIDs does not match on 0x%x. '%s' != '%s'\n",
 			ENDPOINT_NUMBER(endp), endp->callid, callid);
 		return -1;
 	}
@@ -498,7 +498,7 @@ static int verify_ci(const struct mgcp_endpoint *endp,
 	uint32_t ci = strtoul(_ci, NULL, 10);
 
 	if (ci != endp->ci) {
-		LOGP(DMGCP, LOGL_ERROR, "ConnectionIdentifiers do not match on 0x%x. %u != %s\n",
+		LOGP(DLMGCP, LOGL_ERROR, "ConnectionIdentifiers do not match on 0x%x. %u != %s\n",
 			ENDPOINT_NUMBER(endp), endp->ci, _ci);
 		return -1;
 	}
@@ -526,7 +526,7 @@ static int parse_conn_mode(const char *msg, struct mgcp_endpoint *endp)
 	else if (strcmp(msg, "loopback") == 0)
 		endp->conn_mode = MGCP_CONN_LOOPBACK;
 	else {
-		LOGP(DMGCP, LOGL_ERROR, "Unknown connection mode: '%s'\n", msg);
+		LOGP(DLMGCP, LOGL_ERROR, "Unknown connection mode: '%s'\n", msg);
 		ret = -1;
 	}
 
@@ -535,7 +535,7 @@ static int parse_conn_mode(const char *msg, struct mgcp_endpoint *endp)
 	endp->bts_end.output_enabled =
 		endp->conn_mode & MGCP_CONN_RECV_ONLY ? 1 : 0;
 
-	LOGP(DMGCP, LOGL_DEBUG, "endpoint %x connection mode '%s' %d output_enabled net %d bts %d\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "endpoint %x connection mode '%s' %d output_enabled net %d bts %d\n",
 	     ENDPOINT_NUMBER(endp),
 	     msg, endp->conn_mode, endp->net_end.output_enabled,
 	     endp->bts_end.output_enabled);
@@ -571,7 +571,7 @@ static int allocate_port(struct mgcp_endpoint *endp, struct mgcp_rtp_end *end,
 
 	}
 
-	LOGP(DMGCP, LOGL_ERROR, "Allocating a RTP/RTCP port failed 200 times 0x%x.\n",
+	LOGP(DLMGCP, LOGL_ERROR, "Allocating a RTP/RTCP port failed 200 times 0x%x.\n",
 	     ENDPOINT_NUMBER(endp));
 	return -1;
 }
@@ -649,7 +649,7 @@ void mgcp_rtp_end_config(struct mgcp_endpoint *endp, int expect_ssrc_change,
 	rtp->force_aligned_timing = tcfg->force_aligned_timing;
 	rtp->force_constant_ssrc = patch_ssrc ? 1 : 0;
 
-	LOGP(DMGCP, LOGL_DEBUG,
+	LOGP(DLMGCP, LOGL_DEBUG,
 	     "Configuring RTP endpoint: local port %d%s%s\n",
 	     ntohs(rtp->rtp_port),
 	     rtp->force_aligned_timing ? ", force constant timing" : "",
@@ -681,11 +681,11 @@ static int mgcp_parse_osmux_cid(const char *line)
 		return -1;
 
 	if (osmux_cid > OSMUX_CID_MAX) {
-		LOGP(DMGCP, LOGL_ERROR, "Osmux ID too large: %u > %u\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Osmux ID too large: %u > %u\n",
 		     osmux_cid, OSMUX_CID_MAX);
 		return -1;
 	}
-	LOGP(DMGCP, LOGL_DEBUG, "bsc-nat offered Osmux CID %u\n", osmux_cid);
+	LOGP(DLMGCP, LOGL_DEBUG, "bsc-nat offered Osmux CID %u\n", osmux_cid);
 
 	return osmux_cid;
 }
@@ -694,10 +694,10 @@ static int mgcp_osmux_setup(struct mgcp_endpoint *endp, const char *line)
 {
 	if (!endp->cfg->osmux_init) {
 		if (osmux_init(OSMUX_ROLE_BSC, endp->cfg) < 0) {
-			LOGP(DMGCP, LOGL_ERROR, "Cannot init OSMUX\n");
+			LOGP(DLMGCP, LOGL_ERROR, "Cannot init OSMUX\n");
 			return -1;
 		}
-		LOGP(DMGCP, LOGL_NOTICE, "OSMUX socket has been set up\n");
+		LOGP(DLMGCP, LOGL_NOTICE, "OSMUX socket has been set up\n");
 	}
 
 	return mgcp_parse_osmux_cid(line);
@@ -747,7 +747,7 @@ static struct msgb *handle_create_con(struct mgcp_parse_data *p)
 			have_sdp = 1;
 			goto mgcp_header_done;
 		default:
-			LOGP(DMGCP, LOGL_NOTICE, "Unhandled option: '%c'/%d on 0x%x\n",
+			LOGP(DLMGCP, LOGL_NOTICE, "Unhandled option: '%c'/%d on 0x%x\n",
 				*line, *line, ENDPOINT_NUMBER(endp));
 			break;
 		}
@@ -758,20 +758,20 @@ mgcp_header_done:
 
 	/* Check required data */
 	if (!callid || !mode) {
-		LOGP(DMGCP, LOGL_ERROR, "Missing callid and mode in CRCX on 0x%x\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Missing callid and mode in CRCX on 0x%x\n",
 		     ENDPOINT_NUMBER(endp));
 		return create_err_response(endp, 400, "CRCX", p->trans);
 	}
 
 	if (endp->allocated) {
 		if (tcfg->force_realloc) {
-			LOGP(DMGCP, LOGL_NOTICE, "Endpoint 0x%x already allocated. Forcing realloc.\n",
+			LOGP(DLMGCP, LOGL_NOTICE, "Endpoint 0x%x already allocated. Forcing realloc.\n",
 			    ENDPOINT_NUMBER(endp));
 			mgcp_release_endp(endp);
 			if (p->cfg->realloc_cb)
 				p->cfg->realloc_cb(tcfg, ENDPOINT_NUMBER(endp));
 		} else {
-			LOGP(DMGCP, LOGL_ERROR, "Endpoint is already used. 0x%x\n",
+			LOGP(DLMGCP, LOGL_ERROR, "Endpoint is already used. 0x%x\n",
 			     ENDPOINT_NUMBER(endp));
 			return create_err_response(endp, 400, "CRCX", p->trans);
 		}
@@ -813,7 +813,7 @@ mgcp_header_done:
 		endp->osmux.cid = osmux_cid;
 		endp->osmux.state = OSMUX_STATE_NEGOTIATING;
 	} else if (endp->cfg->osmux == OSMUX_USAGE_ONLY) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 			"Osmux only and no osmux offered on 0x%x\n", ENDPOINT_NUMBER(endp));
 		goto error2;
 	}
@@ -845,7 +845,7 @@ mgcp_header_done:
 				MGCP_ENDP_CRCX, p->trans);
 		switch (rc) {
 		case MGCP_POLICY_REJECT:
-			LOGP(DMGCP, LOGL_NOTICE, "CRCX rejected by policy on 0x%x\n",
+			LOGP(DLMGCP, LOGL_NOTICE, "CRCX rejected by policy on 0x%x\n",
 			     ENDPOINT_NUMBER(endp));
 			mgcp_release_endp(endp);
 			return create_err_response(endp, 400, "CRCX", p->trans);
@@ -861,7 +861,7 @@ mgcp_header_done:
 		}
 	}
 
-	LOGP(DMGCP, LOGL_DEBUG, "Creating endpoint on: 0x%x CI: %u port: %u/%u\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "Creating endpoint on: 0x%x CI: %u port: %u/%u\n",
 		ENDPOINT_NUMBER(endp), endp->ci,
 		endp->net_end.local_port, endp->bts_end.local_port);
 	if (p->cfg->change_cb)
@@ -875,7 +875,7 @@ mgcp_header_done:
 	return create_response_with_sdp(endp, "CRCX", p->trans);
 error2:
 	mgcp_release_endp(endp);
-	LOGP(DMGCP, LOGL_NOTICE, "Resource error on 0x%x\n", ENDPOINT_NUMBER(endp));
+	LOGP(DLMGCP, LOGL_NOTICE, "Resource error on 0x%x\n", ENDPOINT_NUMBER(endp));
 	return create_err_response(endp, error_code, "CRCX", p->trans);
 }
 
@@ -892,7 +892,7 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 		return create_err_response(NULL, 510, "MDCX", p->trans);
 
 	if (endp->ci == CI_UNUSED) {
-		LOGP(DMGCP, LOGL_ERROR, "Endpoint is not "
+		LOGP(DLMGCP, LOGL_ERROR, "Endpoint is not "
 			"holding a connection. 0x%x\n", ENDPOINT_NUMBER(endp));
 		return create_err_response(endp, 400, "MDCX", p->trans);
 	}
@@ -934,7 +934,7 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 			 */
 			break;
 		default:
-			LOGP(DMGCP, LOGL_NOTICE, "Unhandled MGCP option: '%c'/%d on 0x%x\n",
+			LOGP(DLMGCP, LOGL_NOTICE, "Unhandled MGCP option: '%c'/%d on 0x%x\n",
 				line[0], line[0], ENDPOINT_NUMBER(endp));
 			break;
 		}
@@ -957,7 +957,7 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 						MGCP_ENDP_MDCX, p->trans);
 		switch (rc) {
 		case MGCP_POLICY_REJECT:
-			LOGP(DMGCP, LOGL_NOTICE, "MDCX rejected by policy on 0x%x\n",
+			LOGP(DLMGCP, LOGL_NOTICE, "MDCX rejected by policy on 0x%x\n",
 			     ENDPOINT_NUMBER(endp));
 			if (silent)
 				goto out_silent;
@@ -965,7 +965,7 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 			break;
 		case MGCP_POLICY_DEFER:
 			/* stop processing */
-			LOGP(DMGCP, LOGL_DEBUG, "endp %x MDCX defer\n",
+			LOGP(DLMGCP, LOGL_DEBUG, "endp %x MDCX defer\n",
 			     ENDPOINT_NUMBER(endp));
 			return NULL;
 			break;
@@ -979,7 +979,7 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 	mgcp_rtp_end_config(endp, 1, &endp->bts_end);
 
 	/* modify */
-	LOGP(DMGCP, LOGL_DEBUG, "Modified endpoint on: 0x%x Server: %s:%u\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "Modified endpoint on: 0x%x Server: %s:%u\n",
 		ENDPOINT_NUMBER(endp), inet_ntoa(endp->net_end.addr), ntohs(endp->net_end.rtp_port));
 	if (p->cfg->change_cb)
 		p->cfg->change_cb(endp->tcfg, ENDPOINT_NUMBER(endp), MGCP_ENDP_MDCX);
@@ -998,7 +998,7 @@ error3:
 
 
 out_silent:
-	LOGP(DMGCP, LOGL_DEBUG, "endp %x Modify endpoint: silent exit\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "endp %x Modify endpoint: silent exit\n",
 	     ENDPOINT_NUMBER(endp));
 	return NULL;
 }
@@ -1015,7 +1015,7 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 		return create_err_response(NULL, error_code, "DLCX", p->trans);
 
 	if (!p->endp->allocated) {
-		LOGP(DMGCP, LOGL_ERROR, "Endpoint is not used. 0x%x\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Endpoint is not used. 0x%x\n",
 			ENDPOINT_NUMBER(endp));
 		return create_err_response(endp, 400, "DLCX", p->trans);
 	}
@@ -1037,7 +1037,7 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 			silent = strcmp("noanswer", line + 3) == 0;
 			break;
 		default:
-			LOGP(DMGCP, LOGL_NOTICE, "Unhandled option: '%c'/%d on 0x%x\n",
+			LOGP(DLMGCP, LOGL_NOTICE, "Unhandled option: '%c'/%d on 0x%x\n",
 				line[0], line[0], ENDPOINT_NUMBER(endp));
 			break;
 		}
@@ -1050,7 +1050,7 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 						MGCP_ENDP_DLCX, p->trans);
 		switch (rc) {
 		case MGCP_POLICY_REJECT:
-			LOGP(DMGCP, LOGL_NOTICE, "DLCX rejected by policy on 0x%x\n",
+			LOGP(DLMGCP, LOGL_NOTICE, "DLCX rejected by policy on 0x%x\n",
 			     ENDPOINT_NUMBER(endp));
 			if (silent)
 				goto out_silent;
@@ -1068,7 +1068,7 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 	}
 
 	/* free the connection */
-	LOGP(DMGCP, LOGL_DEBUG, "Deleted endpoint on: 0x%x Server: %s:%u\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "Deleted endpoint on: 0x%x Server: %s:%u\n",
 		ENDPOINT_NUMBER(endp), inet_ntoa(endp->net_end.addr), ntohs(endp->net_end.rtp_port));
 
 	/* save the statistics of the current call */
@@ -1093,7 +1093,7 @@ out_silent:
 static struct msgb *handle_rsip(struct mgcp_parse_data *p)
 {
 	if (p->found != 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to find the endpoint.\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to find the endpoint.\n");
 		return NULL;
 	}
 
@@ -1149,7 +1149,7 @@ static void mgcp_keepalive_timer_cb(void *_tcfg)
 {
 	struct mgcp_trunk_config *tcfg = _tcfg;
 	int i;
-	LOGP(DMGCP, LOGL_DEBUG, "Triggered trunk %d keepalive timer.\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "Triggered trunk %d keepalive timer.\n",
 	     tcfg->trunk_nr);
 
 	if (tcfg->keepalive_interval <= 0)
@@ -1161,7 +1161,7 @@ static void mgcp_keepalive_timer_cb(void *_tcfg)
 			send_dummy(endp);
 	}
 
-	LOGP(DMGCP, LOGL_DEBUG, "Rescheduling trunk %d keepalive timer.\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "Rescheduling trunk %d keepalive timer.\n",
 	     tcfg->trunk_nr);
 	osmo_timer_schedule(&tcfg->keepalive_timer, tcfg->keepalive_interval, 0);
 }
@@ -1184,7 +1184,7 @@ struct mgcp_config *mgcp_config_alloc(void)
 
 	cfg = talloc_zero(NULL, struct mgcp_config);
 	if (!cfg) {
-		LOGP(DMGCP, LOGL_FATAL, "Failed to allocate config.\n");
+		LOGP(DLMGCP, LOGL_FATAL, "Failed to allocate config.\n");
 		return NULL;
 	}
 
@@ -1224,7 +1224,7 @@ struct mgcp_trunk_config *mgcp_trunk_alloc(struct mgcp_config *cfg, int nr)
 
 	trunk = talloc_zero(cfg, struct mgcp_trunk_config);
 	if (!trunk) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to allocate.\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to allocate.\n");
 		return NULL;
 	}
 
@@ -1327,7 +1327,7 @@ int mgcp_endpoints_allocate(struct mgcp_trunk_config *tcfg)
 
 void mgcp_release_endp(struct mgcp_endpoint *endp)
 {
-	LOGP(DMGCP, LOGL_DEBUG, "Releasing endpoint on: 0x%x\n", ENDPOINT_NUMBER(endp));
+	LOGP(DLMGCP, LOGL_DEBUG, "Releasing endpoint on: 0x%x\n", ENDPOINT_NUMBER(endp));
 	endp->ci = CI_UNUSED;
 	endp->allocated = 0;
 

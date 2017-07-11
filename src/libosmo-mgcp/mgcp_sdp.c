@@ -100,7 +100,7 @@ int mgcp_set_audio_info(void *ctx, struct mgcp_rtp_codec *codec,
 	}
 
 	if (channels != 1)
-		LOGP(DMGCP, LOGL_NOTICE,
+		LOGP(DLMGCP, LOGL_NOTICE,
 		     "Channels != 1 in SDP: '%s'\n", audio_name);
 
 	return 0;
@@ -148,7 +148,7 @@ void codecs_update(void *ctx, struct sdp_rtp_map *codecs, int used, int payload,
 			continue;
 		if (sscanf(audio_name, "%63[^/]/%d/%d",
 				audio_codec, &rate, &channels) < 1) {
-			LOGP(DMGCP, LOGL_ERROR, "Failed to parse '%s'\n", audio_name);
+			LOGP(DLMGCP, LOGL_ERROR, "Failed to parse '%s'\n", audio_name);
 			continue;
 		}
 
@@ -159,7 +159,7 @@ void codecs_update(void *ctx, struct sdp_rtp_map *codecs, int used, int payload,
 		return;
 	}
 
-	LOGP(DMGCP, LOGL_ERROR, "Unconfigured PT(%d) with %s\n", payload, audio_name);
+	LOGP(DLMGCP, LOGL_ERROR, "Unconfigured PT(%d) with %s\n", payload, audio_name);
 }
 
 int is_codec_compatible(struct mgcp_endpoint *endp, struct sdp_rtp_map *codec)
@@ -254,11 +254,11 @@ int mgcp_parse_sdp_data(struct mgcp_endpoint *endp, struct mgcp_rtp_end *rtp, st
 		}
 		default:
 			if (p->endp)
-				LOGP(DMGCP, LOGL_NOTICE,
+				LOGP(DLMGCP, LOGL_NOTICE,
 				     "Unhandled SDP option: '%c'/%d on 0x%x\n",
 				     line[0], line[0], ENDPOINT_NUMBER(p->endp));
 			else
-				LOGP(DMGCP, LOGL_NOTICE,
+				LOGP(DLMGCP, LOGL_NOTICE,
 				     "Unhandled SDP option: '%c'/%d\n",
 				     line[0], line[0]);
 			break;
@@ -272,7 +272,7 @@ int mgcp_parse_sdp_data(struct mgcp_endpoint *endp, struct mgcp_rtp_end *rtp, st
 
 		if (endp->tcfg->no_audio_transcoding &&
 			!is_codec_compatible(endp, &codecs[i])) {
-			LOGP(DMGCP, LOGL_NOTICE, "Skipping codec %s\n",
+			LOGP(DLMGCP, LOGL_NOTICE, "Skipping codec %s\n",
 				codecs[i].codec_name);
 			continue;
 		}
@@ -291,7 +291,7 @@ int mgcp_parse_sdp_data(struct mgcp_endpoint *endp, struct mgcp_rtp_end *rtp, st
 			rtp->packet_duration_ms = 0;
 		}
 
-		LOGP(DMGCP, LOGL_NOTICE,
+		LOGP(DLMGCP, LOGL_NOTICE,
 		     "Got media info via SDP: port %d, payload %d (%s), "
 		     "duration %d, addr %s\n",
 		     ntohs(rtp->rtp_port), rtp->codec.payload_type,

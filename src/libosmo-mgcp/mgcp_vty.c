@@ -742,7 +742,7 @@ DEFUN(cfg_mgcp_no_transcoder,
       NO_STR "Disable the transcoding\n")
 {
 	if (g_cfg->transcoder_ip) {
-		LOGP(DMGCP, LOGL_NOTICE, "Disabling transcoding on future calls.\n");
+		LOGP(DLMGCP, LOGL_NOTICE, "Disabling transcoding on future calls.\n");
 		talloc_free(g_cfg->transcoder_ip);
 		g_cfg->transcoder_ip = NULL;
 	}
@@ -1437,7 +1437,7 @@ static int allocate_trunk(struct mgcp_trunk_config *trunk)
 	struct mgcp_config *cfg = trunk->cfg;
 
 	if (mgcp_endpoints_allocate(trunk) != 0) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 		     "Failed to allocate %d endpoints on trunk %d.\n",
 		     trunk->number_endpoints, trunk->trunk_nr);
 		return -1;
@@ -1450,7 +1450,7 @@ static int allocate_trunk(struct mgcp_trunk_config *trunk)
 		if (cfg->bts_ports.mode == PORT_ALLOC_STATIC) {
 			cfg->last_bts_port += 2;
 			if (mgcp_bind_bts_rtp_port(endp, cfg->last_bts_port) != 0) {
-				LOGP(DMGCP, LOGL_FATAL,
+				LOGP(DLMGCP, LOGL_FATAL,
 				     "Failed to bind: %d\n", cfg->last_bts_port);
 				return -1;
 			}
@@ -1460,7 +1460,7 @@ static int allocate_trunk(struct mgcp_trunk_config *trunk)
 		if (cfg->net_ports.mode == PORT_ALLOC_STATIC) {
 			cfg->last_net_port += 2;
 			if (mgcp_bind_net_rtp_port(endp, cfg->last_net_port) != 0) {
-				LOGP(DMGCP, LOGL_FATAL,
+				LOGP(DLMGCP, LOGL_FATAL,
 				     "Failed to bind: %d\n", cfg->last_net_port);
 				return -1;
 			}
@@ -1475,7 +1475,7 @@ static int allocate_trunk(struct mgcp_trunk_config *trunk)
 			rtp_port = rtp_calculate_port(ENDPOINT_NUMBER(endp),
 						      cfg->transcoder_ports.base_port);
 			if (mgcp_bind_trans_net_rtp_port(endp, rtp_port) != 0) {
-				LOGP(DMGCP, LOGL_FATAL, "Failed to bind: %d\n", rtp_port);
+				LOGP(DLMGCP, LOGL_FATAL, "Failed to bind: %d\n", rtp_port);
 				return -1;
 			}
 			endp->trans_net.local_alloc = PORT_ALLOC_STATIC;
@@ -1484,7 +1484,7 @@ static int allocate_trunk(struct mgcp_trunk_config *trunk)
 			rtp_port = rtp_calculate_port(endp_back_channel(ENDPOINT_NUMBER(endp)),
 						      cfg->transcoder_ports.base_port);
 			if (mgcp_bind_trans_bts_rtp_port(endp, rtp_port) != 0) {
-				LOGP(DMGCP, LOGL_FATAL, "Failed to bind: %d\n", rtp_port);
+				LOGP(DLMGCP, LOGL_FATAL, "Failed to bind: %d\n", rtp_port);
 				return -1;
 			}
 			endp->trans_bts.local_alloc = PORT_ALLOC_STATIC;
@@ -1525,13 +1525,13 @@ int mgcp_parse_config(const char *config_file, struct mgcp_config *cfg,
 	g_cfg->last_net_port = rtp_calculate_port(0, g_cfg->net_ports.base_port);
 
 	if (allocate_trunk(&g_cfg->trunk) != 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to initialize the virtual trunk.\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to initialize the virtual trunk.\n");
 		return -1;
 	}
 
 	llist_for_each_entry(trunk, &g_cfg->trunks, entry) {
 		if (allocate_trunk(trunk) != 0) {
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 			     "Failed to initialize E1 trunk %d.\n", trunk->trunk_nr);
 			return -1;
 		}

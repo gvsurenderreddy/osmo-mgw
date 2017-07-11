@@ -69,7 +69,7 @@ static uint32_t get_current_ts(unsigned unit)
 
 	memset(&tp, 0, sizeof(tp));
 	if (clock_gettime(CLOCK_MONOTONIC, &tp) != 0)
-		LOGP(DMGCP, LOGL_NOTICE,
+		LOGP(DLMGCP, LOGL_NOTICE,
 			"Getting the clock failed.\n");
 
 	/* convert it to 1/unit seconds */
@@ -113,7 +113,7 @@ int mgcp_send_dummy(struct mgcp_endpoint *endp)
 		return rc;
 
 failed:
-	LOGP(DMGCP, LOGL_ERROR,
+	LOGP(DLMGCP, LOGL_ERROR,
 		"Failed to send dummy %s packet: %s on: 0x%x to %s:%d\n",
 		was_rtcp ? "RTCP" : "RTP",
 		strerror(errno), ENDPOINT_NUMBER(endp), inet_ntoa(endp->net_end.addr),
@@ -154,7 +154,7 @@ static int check_rtp_timestamp(struct mgcp_endpoint *endp,
 	if (seq == sstate->last_seq) {
 		if (timestamp != sstate->last_timestamp) {
 			sstate->err_ts_counter += 1;
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 			     "The %s timestamp delta is != 0 but the sequence "
 			     "number %d is the same, "
 			     "TS offset: %d, SeqNo offset: %d "
@@ -175,7 +175,7 @@ static int check_rtp_timestamp(struct mgcp_endpoint *endp,
 
 	if (tsdelta == 0) {
 		/* Don't update *tsdelta_out */
-		LOGP(DMGCP, LOGL_NOTICE,
+		LOGP(DLMGCP, LOGL_NOTICE,
 		     "The %s timestamp delta is %d "
 		     "on 0x%x SSRC: %u timestamp: %u "
 		     "from %s:%d in %d\n",
@@ -189,7 +189,7 @@ static int check_rtp_timestamp(struct mgcp_endpoint *endp,
 
 	if (sstate->last_tsdelta != tsdelta) {
 		if (sstate->last_tsdelta) {
-			LOGP(DMGCP, LOGL_INFO,
+			LOGP(DLMGCP, LOGL_INFO,
 			     "The %s timestamp delta changes from %d to %d "
 			     "on 0x%x SSRC: %u timestamp: %u from %s:%d in %d\n",
 			     text, sstate->last_tsdelta, tsdelta,
@@ -208,7 +208,7 @@ static int check_rtp_timestamp(struct mgcp_endpoint *endp,
 
 	if (timestamp_error) {
 		sstate->err_ts_counter += 1;
-		LOGP(DMGCP, LOGL_NOTICE,
+		LOGP(DLMGCP, LOGL_NOTICE,
 		     "The %s timestamp has an alignment error of %d "
 		     "on 0x%x SSRC: %u "
 		     "SeqNo delta: %d, TS delta: %d, dTS/dSeq: %d "
@@ -238,7 +238,7 @@ static int adjust_rtp_timestamp_offset(struct mgcp_endpoint *endp,
 	if (tsdelta == 0) {
 		tsdelta = state->out_stream.last_tsdelta;
 		if (tsdelta != 0) {
-			LOGP(DMGCP, LOGL_NOTICE,
+			LOGP(DLMGCP, LOGL_NOTICE,
 			     "A fixed packet duration is not available on 0x%x, "
 			     "using last output timestamp delta instead: %d "
 			     "from %s:%d in %d\n",
@@ -247,7 +247,7 @@ static int adjust_rtp_timestamp_offset(struct mgcp_endpoint *endp,
 			     endp->conn_mode);
 		} else {
 			tsdelta = rtp_end->codec.rate * 20 / 1000;
-			LOGP(DMGCP, LOGL_NOTICE,
+			LOGP(DLMGCP, LOGL_NOTICE,
 			     "Fixed packet duration and last timestamp delta "
 			     "are not available on 0x%x, "
 			     "using fixed 20ms instead: %d "
@@ -264,7 +264,7 @@ static int adjust_rtp_timestamp_offset(struct mgcp_endpoint *endp,
 	if (state->timestamp_offset != timestamp_offset) {
 		state->timestamp_offset = timestamp_offset;
 
-		LOGP(DMGCP, LOGL_NOTICE,
+		LOGP(DLMGCP, LOGL_NOTICE,
 		     "Timestamp offset change on 0x%x SSRC: %u "
 		     "SeqNo delta: %d, TS offset: %d, "
 		     "from %s:%d in %d\n",
@@ -296,7 +296,7 @@ static int align_rtp_timestamp_offset(struct mgcp_endpoint *endp,
 	if (timestamp_error) {
 		state->timestamp_offset += ptime - timestamp_error;
 
-		LOGP(DMGCP, LOGL_NOTICE,
+		LOGP(DLMGCP, LOGL_NOTICE,
 		     "Corrected timestamp alignment error of %d on 0x%x SSRC: %u "
 		     "new TS offset: %d, "
 		     "from %s:%d in %d\n",
@@ -371,7 +371,7 @@ void mgcp_rtp_annex_count(struct mgcp_endpoint *endp, struct mgcp_rtp_state *sta
 			if (seq < state->stats_max_seq)
 				state->stats_cycles += RTP_SEQ_MOD;
 		} else if (udelta <= RTP_SEQ_MOD - RTP_MAX_MISORDER) {
-			LOGP(DMGCP, LOGL_NOTICE,
+			LOGP(DLMGCP, LOGL_NOTICE,
 				"RTP seqno made a very large jump on 0x%x delta: %u\n",
 				ENDPOINT_NUMBER(endp), udelta);
 		}
@@ -433,7 +433,7 @@ void mgcp_patch_and_count(struct mgcp_endpoint *endp, struct mgcp_rtp_state *sta
 		state->out_stream = state->in_stream;
 		state->out_stream.last_timestamp = timestamp;
 		state->out_stream.ssrc = ssrc - 1; /* force output SSRC change */
-		LOGP(DMGCP, LOGL_INFO,
+		LOGP(DLMGCP, LOGL_INFO,
 			"Initializing stream on 0x%x SSRC: %u timestamp: %u "
 			"pkt-duration: %d, from %s:%d in %d\n",
 			ENDPOINT_NUMBER(endp), state->in_stream.ssrc,
@@ -442,7 +442,7 @@ void mgcp_patch_and_count(struct mgcp_endpoint *endp, struct mgcp_rtp_state *sta
 			endp->conn_mode);
 		if (state->packet_duration == 0) {
 			state->packet_duration = rtp_end->codec.rate * 20 / 1000;
-			LOGP(DMGCP, LOGL_NOTICE,
+			LOGP(DLMGCP, LOGL_NOTICE,
 			     "Fixed packet duration is not available on 0x%x, "
 			     "using fixed 20ms instead: %d from %s:%d in %d\n",
 			     ENDPOINT_NUMBER(endp), state->packet_duration,
@@ -450,7 +450,7 @@ void mgcp_patch_and_count(struct mgcp_endpoint *endp, struct mgcp_rtp_state *sta
 			     endp->conn_mode);
 		}
 	} else if (state->in_stream.ssrc != ssrc) {
-		LOGP(DMGCP, LOGL_NOTICE,
+		LOGP(DLMGCP, LOGL_NOTICE,
 			"The SSRC changed on 0x%x: %u -> %u  "
 			"from %s:%d in %d\n",
 			ENDPOINT_NUMBER(endp),
@@ -480,7 +480,7 @@ void mgcp_patch_and_count(struct mgcp_endpoint *endp, struct mgcp_rtp_state *sta
 			if (rtp_end->force_constant_ssrc != -1)
 				rtp_end->force_constant_ssrc -= 1;
 
-			LOGP(DMGCP, LOGL_NOTICE,
+			LOGP(DLMGCP, LOGL_NOTICE,
 			     "SSRC patching enabled on 0x%x SSRC: %u "
 			     "SeqNo offset: %d, TS offset: %d "
 			     "from %s:%d in %d\n",
@@ -538,7 +538,7 @@ void mgcp_patch_and_count(struct mgcp_endpoint *endp, struct mgcp_rtp_state *sta
 		return;
 
 #if 0
-	DEBUGP(DMGCP, "Payload hdr payload %u -> endp payload %u\n",
+	DEBUGP(DLMGCP, "Payload hdr payload %u -> endp payload %u\n",
 	       rtp_hdr->payload_type, payload);
 	rtp_hdr->payload_type = payload;
 #endif
@@ -577,7 +577,7 @@ static int mgcp_send_transcoder(struct mgcp_rtp_end *end,
 		(struct sockaddr *) &addr, sizeof(addr));
 
 	if (rc != len)
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 			"Failed to send data to the transcoder: %s\n",
 			strerror(errno));
 
@@ -592,7 +592,7 @@ int mgcp_send(struct mgcp_endpoint *endp, int dest, int is_rtp,
 	struct mgcp_rtp_state *rtp_state;
 	int tap_idx;
 
-	LOGP(DMGCP, LOGL_DEBUG,
+	LOGP(DLMGCP, LOGL_DEBUG,
 	     "endpoint %x dest %s tcfg->audio_loop %d endp->conn_mode %d (== loopback: %d)\n",
 	     ENDPOINT_NUMBER(endp),
 	     dest == MGCP_DEST_NET? "net" : "bts",
@@ -617,7 +617,7 @@ int mgcp_send(struct mgcp_endpoint *endp, int dest, int is_rtp,
 		rtp_state = &endp->net_state;
 		tap_idx = MGCP_TAP_BTS_OUT;
 	}
-	LOGP(DMGCP, LOGL_DEBUG,
+	LOGP(DLMGCP, LOGL_DEBUG,
 	     "endpoint %x dest %s net_end %s %d %d bts_end %s %d %d rtp_end %s %d %d\n",
 	     ENDPOINT_NUMBER(endp),
 	     dest == MGCP_DEST_NET? "net" : "bts",
@@ -637,7 +637,7 @@ int mgcp_send(struct mgcp_endpoint *endp, int dest, int is_rtp,
 
 	if (!rtp_end->output_enabled) {
 		rtp_end->dropped_packets += 1;
-		LOGP(DMGCP, LOGL_DEBUG,
+		LOGP(DLMGCP, LOGL_DEBUG,
 		     "endpoint %x output disabled, drop to %s %s %d %d\n",
 		     ENDPOINT_NUMBER(endp),
 		     dest == MGCP_DEST_NET? "net" : "bts",
@@ -656,7 +656,7 @@ int mgcp_send(struct mgcp_endpoint *endp, int dest, int is_rtp,
 				break;
 
 			mgcp_patch_and_count(endp, rtp_state, rtp_end, addr, buf, len);
-		LOGP(DMGCP, LOGL_DEBUG,
+		LOGP(DLMGCP, LOGL_DEBUG,
 		     "endpoint %x process/send to %s %s %d %d\n",
 		     ENDPOINT_NUMBER(endp),
 		     (dest == MGCP_DEST_NET)? "net" : "bts",
@@ -685,7 +685,7 @@ int mgcp_send(struct mgcp_endpoint *endp, int dest, int is_rtp,
 		} while (len > 0);
 		return nbytes;
 	} else if (!tcfg->omit_rtcp) {
-		LOGP(DMGCP, LOGL_DEBUG,
+		LOGP(DLMGCP, LOGL_DEBUG,
 		     "endpoint %x send to %s %s %d %d\n",
 		     ENDPOINT_NUMBER(endp),
 		     dest == MGCP_DEST_NET? "net" : "bts",
@@ -711,7 +711,7 @@ static int receive_from(struct mgcp_endpoint *endp, int fd, struct sockaddr_in *
 	rc = recvfrom(fd, buf, bufsize, 0,
 			    (struct sockaddr *) addr, &slen);
 	if (rc < 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to receive message on: 0x%x errno: %d/%s\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to receive message on: 0x%x errno: %d/%s\n",
 			ENDPOINT_NUMBER(endp), errno, strerror(errno));
 		return -1;
 	}
@@ -738,19 +738,19 @@ static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
 	if (rc <= 0)
 		return -1;
 
-	LOGP(DMGCP, LOGL_DEBUG,
+	LOGP(DLMGCP, LOGL_DEBUG,
 	     "endpoint %x",
 	     ENDPOINT_NUMBER(endp));
-	LOGPC(DMGCP, LOGL_DEBUG,
+	LOGPC(DLMGCP, LOGL_DEBUG,
 	      " from net %s %d",
 	      inet_ntoa(addr.sin_addr),
 	      ntohs(addr.sin_port));
-	LOGPC(DMGCP, LOGL_DEBUG,
+	LOGPC(DLMGCP, LOGL_DEBUG,
 	      " net_end %s %d %d",
 	      inet_ntoa(endp->net_end.addr),
 	      ntohs(endp->net_end.rtp_port),
 	      ntohs(endp->net_end.rtcp_port));
-	LOGPC(DMGCP, LOGL_DEBUG,
+	LOGPC(DLMGCP, LOGL_DEBUG,
 	      " bts_end %s %d %d\n",
 	      inet_ntoa(endp->bts_end.addr),
 	      ntohs(endp->bts_end.rtp_port),
@@ -758,10 +758,10 @@ static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
 	     );
 
 	if (memcmp(&addr.sin_addr, &endp->net_end.addr, sizeof(addr.sin_addr)) != 0) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 			"rtp_data_net: Endpoint 0x%x data from wrong address %s vs. ",
 			ENDPOINT_NUMBER(endp), inet_ntoa(addr.sin_addr));
-		LOGPC(DMGCP, LOGL_ERROR,
+		LOGPC(DLMGCP, LOGL_ERROR,
 			"%s\n", inet_ntoa(endp->net_end.addr));
 		return -1;
 	}
@@ -771,7 +771,7 @@ static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
 	case MGCP_RTP_TRANSCODED:
 		if (endp->net_end.rtp_port != addr.sin_port &&
 		    endp->net_end.rtcp_port != addr.sin_port) {
-			LOGP(DMGCP, LOGL_ERROR,
+			LOGP(DLMGCP, LOGL_ERROR,
 				"rtp_data_net: Data from wrong source port %d on 0x%x\n",
 				ntohs(addr.sin_port), ENDPOINT_NUMBER(endp));
 			return -1;
@@ -782,7 +782,7 @@ static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
 		break;
 	}
 
-	LOGP(DMGCP, LOGL_DEBUG,
+	LOGP(DLMGCP, LOGL_DEBUG,
 	     "rtp_data_net: Endpoint %x data from %s %d\n",
 	     ENDPOINT_NUMBER(endp),
 	     inet_ntoa(addr.sin_addr),
@@ -790,7 +790,7 @@ static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
 
 	/* throw away the dummy message */
 	if (rc == 1 && buf[0] == MGCP_DUMMY_LOAD) {
-		LOGP(DMGCP, LOGL_NOTICE, "Filtered dummy from network on 0x%x\n",
+		LOGP(DLMGCP, LOGL_NOTICE, "Filtered dummy from network on 0x%x\n",
 			ENDPOINT_NUMBER(endp));
 		return 0;
 	}
@@ -814,7 +814,7 @@ static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
 		break;
 	}
 
-	LOGP(DMGCP, LOGL_ERROR, "Bad MGCP type %u on endpoint %u\n",
+	LOGP(DLMGCP, LOGL_ERROR, "Bad MGCP type %u on endpoint %u\n",
 	     endp->type, ENDPOINT_NUMBER(endp));
 	return 0;
 }
@@ -833,7 +833,7 @@ static void discover_bts(struct mgcp_endpoint *endp, int proto, struct sockaddr_
 			endp->bts_end.rtp_port = addr->sin_port;
 			endp->bts_end.addr = addr->sin_addr;
 
-			LOGP(DMGCP, LOGL_NOTICE,
+			LOGP(DLMGCP, LOGL_NOTICE,
 				"Found BTS for endpoint: 0x%x on port: %d/%d of %s\n",
 				ENDPOINT_NUMBER(endp), ntohs(endp->bts_end.rtp_port),
 				ntohs(endp->bts_end.rtcp_port), inet_ntoa(addr->sin_addr));
@@ -866,7 +866,7 @@ static int rtp_data_bts(struct osmo_fd *fd, unsigned int what)
 	discover_bts(endp, proto, &addr);
 
 	if (memcmp(&endp->bts_end.addr, &addr.sin_addr, sizeof(addr.sin_addr)) != 0) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 			"rtp_data_bts: Data from wrong bts %s on 0x%x\n",
 			inet_ntoa(addr.sin_addr), ENDPOINT_NUMBER(endp));
 		return -1;
@@ -874,13 +874,13 @@ static int rtp_data_bts(struct osmo_fd *fd, unsigned int what)
 
 	if (endp->bts_end.rtp_port != addr.sin_port &&
 	    endp->bts_end.rtcp_port != addr.sin_port) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 			"rtp_data_bts: ata from wrong bts source port %d on 0x%x\n",
 			ntohs(addr.sin_port), ENDPOINT_NUMBER(endp));
 		return -1;
 	}
 
-	LOGP(DMGCP, LOGL_DEBUG,
+	LOGP(DLMGCP, LOGL_DEBUG,
 	     "rtp_data_bts: Endpoint %x data from %s %d\n",
 	     ENDPOINT_NUMBER(endp),
 	     inet_ntoa(addr.sin_addr),
@@ -888,7 +888,7 @@ static int rtp_data_bts(struct osmo_fd *fd, unsigned int what)
 
 	/* throw away the dummy message */
 	if (rc == 1 && buf[0] == MGCP_DUMMY_LOAD) {
-		LOGP(DMGCP, LOGL_NOTICE, "Filtered dummy from bts on 0x%x\n",
+		LOGP(DLMGCP, LOGL_NOTICE, "Filtered dummy from bts on 0x%x\n",
 			ENDPOINT_NUMBER(endp));
 		return 0;
 	}
@@ -901,7 +901,7 @@ static int rtp_data_bts(struct osmo_fd *fd, unsigned int what)
 
 	switch (endp->type) {
 	case MGCP_RTP_DEFAULT:
-		LOGP(DMGCP, LOGL_DEBUG,
+		LOGP(DLMGCP, LOGL_DEBUG,
 		     "rtp_data_bts: Endpoint %x MGCP_RTP_DEFAULT\n",
 		     ENDPOINT_NUMBER(endp));
 		return mgcp_send(endp, MGCP_DEST_NET, proto == MGCP_PROTO_RTP,
@@ -916,7 +916,7 @@ static int rtp_data_bts(struct osmo_fd *fd, unsigned int what)
 		break;	/* Should not happen */
 	}
 
-	LOGP(DMGCP, LOGL_ERROR, "Bad MGCP type %u on endpoint %u\n",
+	LOGP(DLMGCP, LOGL_ERROR, "Bad MGCP type %u on endpoint %u\n",
 	     endp->type, ENDPOINT_NUMBER(endp));
 	return 0;
 }
@@ -937,7 +937,7 @@ static int rtp_data_transcoder(struct mgcp_rtp_end *end, struct mgcp_endpoint *_
 	proto = fd == &end->rtp ? MGCP_PROTO_RTP : MGCP_PROTO_RTCP;
 
 	if (memcmp(&addr.sin_addr, &cfg->transcoder_in, sizeof(addr.sin_addr)) != 0) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 			"Data not coming from transcoder dest: %d %s on 0x%x\n",
 			dest, inet_ntoa(addr.sin_addr), ENDPOINT_NUMBER(_endp));
 		return -1;
@@ -945,7 +945,7 @@ static int rtp_data_transcoder(struct mgcp_rtp_end *end, struct mgcp_endpoint *_
 
 	if (end->rtp_port != addr.sin_port &&
 	    end->rtcp_port != addr.sin_port) {
-		LOGP(DMGCP, LOGL_ERROR,
+		LOGP(DLMGCP, LOGL_ERROR,
 			"Data from wrong transcoder dest %d source port %d on 0x%x\n",
 			dest, ntohs(addr.sin_port), ENDPOINT_NUMBER(_endp));
 		return -1;
@@ -953,7 +953,7 @@ static int rtp_data_transcoder(struct mgcp_rtp_end *end, struct mgcp_endpoint *_
 
 	/* throw away the dummy message */
 	if (rc == 1 && buf[0] == MGCP_DUMMY_LOAD) {
-		LOGP(DMGCP, LOGL_NOTICE, "Filtered dummy from transcoder dest %d on 0x%x\n",
+		LOGP(DLMGCP, LOGL_NOTICE, "Filtered dummy from transcoder dest %d on 0x%x\n",
 			dest, ENDPOINT_NUMBER(_endp));
 		return 0;
 	}
@@ -985,7 +985,7 @@ int mgcp_create_bind(const char *source_addr, struct osmo_fd *fd, int port)
 
 	fd->fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd->fd < 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to create UDP port.\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to create UDP port.\n");
 		return -1;
 	}
 
@@ -1017,14 +1017,14 @@ static int bind_rtp(struct mgcp_config *cfg, const char *source_addr,
 {
 	if (mgcp_create_bind(source_addr, &rtp_end->rtp,
 			     rtp_end->local_port) != 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to create RTP port: %s:%d on 0x%x\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to create RTP port: %s:%d on 0x%x\n",
 		       source_addr, rtp_end->local_port, endpno);
 		goto cleanup0;
 	}
 
 	if (mgcp_create_bind(source_addr, &rtp_end->rtcp,
 			     rtp_end->local_port + 1) != 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to create RTCP port: %s:%d on 0x%x\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to create RTCP port: %s:%d on 0x%x\n",
 		       source_addr, rtp_end->local_port + 1, endpno);
 		goto cleanup1;
 	}
@@ -1034,14 +1034,14 @@ static int bind_rtp(struct mgcp_config *cfg, const char *source_addr,
 
 	rtp_end->rtp.when = BSC_FD_READ;
 	if (osmo_fd_register(&rtp_end->rtp) != 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to register RTP port %d on 0x%x\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to register RTP port %d on 0x%x\n",
 			rtp_end->local_port, endpno);
 		goto cleanup2;
 	}
 
 	rtp_end->rtcp.when = BSC_FD_READ;
 	if (osmo_fd_register(&rtp_end->rtcp) != 0) {
-		LOGP(DMGCP, LOGL_ERROR, "Failed to register RTCP port %d on 0x%x\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to register RTCP port %d on 0x%x\n",
 			rtp_end->local_port + 1, endpno);
 		goto cleanup3;
 	}
@@ -1066,7 +1066,7 @@ static int int_bind(const char *port,
 		    const char *source_addr, int rtp_port)
 {
 	if (end->rtp.fd != -1 || end->rtcp.fd != -1) {
-		LOGP(DMGCP, LOGL_ERROR, "Previous %s was still bound on %d\n",
+		LOGP(DLMGCP, LOGL_ERROR, "Previous %s was still bound on %d\n",
 			port, ENDPOINT_NUMBER(_endp));
 		mgcp_free_rtp_port(end);
 	}
