@@ -40,13 +40,14 @@ mgcp_test_SOURCES = \
 	$(NULL)
 
 mgcp_test_LDADD = \
-	$(top_builddir)/src/libosmo-mgcp/libosmo-mgcp.a \
+	$(top_builddir)/src/libosmo-mgcp/libosmo-mgcp.la \
 	$(LIBOSMOCORE_LIBS) \
 	$(LIBOSMOGSM_LIBS) \
 	$(LIBOSMOSCCP_LIBS) \
 	$(LIBOSMOVTY_LIBS) \
 	$(LIBRARY_DL) \
 	$(LIBOSMONETIF_LIBS) \
+	$(LIBRARY_GSM) \
 	-lrt \
 	-lm  \
 	$(NULL)
@@ -56,7 +57,7 @@ mgcp_transcoding_test_SOURCES = \
 	$(NULL)
 
 mgcp_transcoding_test_LDADD = \
-	$(top_builddir)/src/libosmo-mgcp/libosmo-mgcp.a \
+	$(top_builddir)/src/libosmo-mgcp/libosmo-mgcp.la \
 	$(LIBOSMOCORE_LIBS) \
 	$(LIBOSMOGSM_LIBS) \
 	$(LIBBCG729_LIBS) \
@@ -74,13 +75,14 @@ mgcpgw_client_test_SOURCES = \
 	$(NULL)
 
 mgcpgw_client_test_LDADD = \
-	$(top_builddir)/src/libosmo-mgcp/libosmo-mgcp.a \
+	$(top_builddir)/src/libosmo-mgcp/libosmo-mgcp.la \
 	$(LIBOSMOCORE_LIBS) \
 	$(LIBOSMOGSM_LIBS) \
 	$(LIBOSMOSCCP_LIBS) \
 	$(LIBOSMOVTY_LIBS) \
 	$(LIBRARY_DL) \
 	$(LIBOSMONETIF_LIBS) \
+	$(LIBRARY_GSM) \
 	-lrt \
 	-lm  \
 	$(NULL)
