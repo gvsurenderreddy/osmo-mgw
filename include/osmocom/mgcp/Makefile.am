@@ -1,6 +1,7 @@
 noinst_HEADERS = \
-	mgcp.h \
+	debug.h \
 	mgcp_internal.h \
 	mgcp_transcode.h \
-	mgcpgw_client.h \
+	osmux.h \
+	vty.h \
 	$(NULL)

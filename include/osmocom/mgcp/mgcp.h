@@ -27,8 +27,6 @@
 #include <osmocom/core/write_queue.h>
 #include <osmocom/core/timer.h>
 
-#include "debug.h"
-
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>

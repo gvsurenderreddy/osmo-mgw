@@ -21,6 +21,11 @@ AM_LDFLAGS = \
 	$(LIBBCG729_LIBS) \
 	$(NULL)
 
+# This is _NOT_ the library release version, it's an API version.
+# Please read Chapter 6 "Library interface versions" of the libtool
+# documentation before making any modification
+MGCP_LIBVERSION=0:0:0
+
 lib_LTLIBRARIES = \
 	libosmo-mgcp.la \
 	$(NULL)
@@ -44,3 +49,5 @@ libosmo_mgcp_la_SOURCES += \
 	mgcp_transcode.c \
 	$(NULL)
 endif
+
+libosmo_mgcp_la_LDFLAGS = $(AM_LDFLAGS) -version-info $(MGCP_LIBVERSION)
