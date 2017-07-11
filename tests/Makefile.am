@@ -2,12 +2,6 @@ SUBDIRS = \
 	mgcp \
 	$(NULL)
 
-if BUILD_SMPP
-SUBDIRS += \
-	smpp \
-	$(NULL)
-endif
-
 # The `:;' works around a Bash 3.2 bug when the output is not writeable.
 $(srcdir)/package.m4: $(top_srcdir)/configure.ac
 	:;{ \
@@ -32,7 +26,6 @@ EXTRA_DIST = \
 	$(TESTSUITE) \
 	vty_test_runner.py \
 	ctrl_test_runner.py \
-	smpp_test_runner.py \
 	$(NULL)
 
 TESTSUITE = $(srcdir)/testsuite
@@ -47,9 +40,6 @@ python-tests: $(BUILT_SOURCES)
 	osmotestconfig.py -p $(abs_top_srcdir) -w $(abs_top_builddir) -v
 	$(PYTHON) $(srcdir)/vty_test_runner.py -w $(abs_top_builddir) -v
 	$(PYTHON) $(srcdir)/ctrl_test_runner.py -w $(abs_top_builddir) -v
-if BUILD_SMPP
-	$(PYTHON) $(srcdir)/smpp_test_runner.py -w $(abs_top_builddir) -v
-endif
 	rm -f $(top_builddir)/hlr.sqlite3
 else
 python-tests: $(BUILT_SOURCES)
