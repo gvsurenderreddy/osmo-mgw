@@ -122,7 +122,7 @@ AC_OUTPUT(
     include/openbsc/Makefile
     include/Makefile
     src/Makefile
-    src/libmgcp/Makefile
+    src/libosmo-mgcp/Makefile
     src/osmo-bsc_mgcp/Makefile
     tests/Makefile
     tests/atlocal

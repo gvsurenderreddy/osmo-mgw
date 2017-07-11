@@ -21,7 +21,7 @@ AM_LDFLAGS = \
 
 # Libraries
 SUBDIRS = \
-	libmgcp \
+	libosmo-mgcp \
 	$(NULL)
 
 # Programs
