@@ -16,7 +16,7 @@ SUBDIRS = \
 	$(NULL)
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = openbsc.pc
+pkgconfig_DATA = libosmo-mgcp.pc
 
 BUILT_SOURCES = $(top_srcdir)/.version
 EXTRA_DIST = git-version-gen osmoappdesc.py .version
