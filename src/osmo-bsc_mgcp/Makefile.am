@@ -23,7 +23,7 @@ osmo_bsc_mgcp_SOURCES = \
 	$(NULL)
 
 osmo_bsc_mgcp_LDADD = \
-	$(top_builddir)/src/libosmo-mgcp/libosmo-mgcp.la \
+	$(top_builddir)/src/libosmo-legacy-mgcp/libosmo-legacy-mgcp.la \
 	$(LIBOSMOVTY_LIBS) \
 	$(LIBOSMOCORE_LIBS) \
 	$(LIBOSMOGSM_LIBS) \
