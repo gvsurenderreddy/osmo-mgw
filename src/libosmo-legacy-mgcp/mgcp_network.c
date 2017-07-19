@@ -36,10 +36,10 @@
 
 #include <osmocom/netif/rtp.h>
 
-#include <osmocom/mgcp/mgcp.h>
-#include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/legacy_mgcp/mgcp.h>
+#include <osmocom/legacy_mgcp/mgcp_internal.h>
 
-#include <osmocom/mgcp/osmux.h>
+#include <osmocom/legacy_mgcp/osmux.h>
 
 #warning "Make use of the rtp proxy code"
 

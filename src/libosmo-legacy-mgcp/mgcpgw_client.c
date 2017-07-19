@@ -23,9 +23,9 @@
 #include <osmocom/core/msgb.h>
 #include <osmocom/core/logging.h>
 
-#include <osmocom/mgcp/mgcpgw_client.h>
-#include <osmocom/mgcp/mgcp.h>
-#include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/legacy_mgcp/mgcpgw_client.h>
+#include <osmocom/legacy_mgcp/mgcp.h>
+#include <osmocom/legacy_mgcp/mgcp_internal.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>

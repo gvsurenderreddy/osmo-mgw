@@ -20,9 +20,9 @@
 #include <osmocom/netif/osmux.h>
 #include <osmocom/netif/rtp.h>
 
-#include <osmocom/mgcp/mgcp.h>
-#include <osmocom/mgcp/mgcp_internal.h>
-#include <osmocom/mgcp/osmux.h>
+#include <osmocom/legacy_mgcp/mgcp.h>
+#include <osmocom/legacy_mgcp/mgcp_internal.h>
+#include <osmocom/legacy_mgcp/osmux.h>
 
 static struct osmo_fd osmux_fd;
 

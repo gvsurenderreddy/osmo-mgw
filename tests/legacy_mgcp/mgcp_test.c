@@ -19,9 +19,9 @@
 #undef _GNU_SOURCE
 #define _GNU_SOURCE
 
-#include <osmocom/mgcp/mgcp.h>
-#include <osmocom/mgcp/vty.h>
-#include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/legacy_mgcp/mgcp.h>
+#include <osmocom/legacy_mgcp/vty.h>
+#include <osmocom/legacy_mgcp/mgcp_internal.h>
 
 #include <osmocom/core/application.h>
 #include <osmocom/core/talloc.h>
