@@ -8,6 +8,7 @@ AM_CFLAGS = \
 	-Wall \
 	-ggdb3 \
 	$(LIBOSMOCORE_CFLAGS) \
+	$(LIBOSMONETIF_CFLAGS) \
 	$(LIBBCG729_CFLAGS) \
 	$(COVERAGE_CFLAGS) \
 	$(NULL)
@@ -41,6 +42,7 @@ mgcp_test_LDADD = \
 	$(LIBOSMOCORE_LIBS) \
 	$(LIBOSMOVTY_LIBS) \
 	$(LIBRARY_DL) \
+	$(LIBOSMONETIF_LIBS) \
 	$(LIBRARY_GSM) \
 	-lm  \
 	$(NULL)
@@ -55,6 +57,7 @@ mgcp_transcoding_test_LDADD = \
 	$(LIBOSMOVTY_LIBS) \
 	$(LIBBCG729_LIBS) \
 	$(LIBRARY_DL) \
+	$(LIBOSMONETIF_LIBS) \
 	$(LIBRARY_GSM) \
 	-lm \
 	$(NULL)
@@ -68,5 +71,6 @@ mgcpgw_client_test_LDADD = \
 	$(LIBOSMOCORE_LIBS) \
 	$(LIBOSMOVTY_LIBS) \
 	$(LIBRARY_DL) \
+	$(LIBOSMONETIF_LIBS) \
 	$(LIBRARY_GSM) \
 	$(NULL)
