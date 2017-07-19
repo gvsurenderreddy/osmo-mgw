@@ -1,3 +1,3 @@
 SUBDIRS = \
-	mgcp \
+	legacy_mgcp \
 	$(NULL)

@@ -1,22 +1,22 @@
 AT_INIT
 AT_BANNER([Regression tests.])
 
-AT_SETUP([mgcp])
-AT_KEYWORDS([mgcp])
-cat $abs_srcdir/mgcp/mgcp_test.ok > expout
-AT_CHECK([$abs_top_builddir/tests/mgcp/mgcp_test], [], [expout], [ignore])
+AT_SETUP([legacy_mgcp])
+AT_KEYWORDS([legacy_mgcp])
+cat $abs_srcdir/legacy_mgcp/mgcp_test.ok > expout
+AT_CHECK([$abs_top_builddir/tests/legacy_mgcp/mgcp_test], [], [expout], [ignore])
 AT_CLEANUP
 
-AT_SETUP([mgcp-trans])
-AT_KEYWORDS([mgcp-trans])
+AT_SETUP([legacy_mgcp-trans])
+AT_KEYWORDS([legacy_mgcp-trans])
 AT_CHECK([test "$enable_mgcp_transcoding_test" == yes || exit 77])
-cat $abs_srcdir/mgcp/mgcp_transcoding_test.ok > expout
-AT_CHECK([$abs_top_builddir/tests/mgcp/mgcp_transcoding_test], [], [expout], [ignore])
+cat $abs_srcdir/legacy_mgcp/mgcp_transcoding_test.ok > expout
+AT_CHECK([$abs_top_builddir/tests/legacy_mgcp/mgcp_transcoding_test], [], [expout], [ignore])
 AT_CLEANUP
 
-AT_SETUP([mgcpgw_client])
-AT_KEYWORDS([mgcpgw_client])
-cat $abs_srcdir/mgcp/mgcpgw_client_test.ok > expout
-cat $abs_srcdir/mgcp/mgcpgw_client_test.err > experr
-AT_CHECK([$abs_top_builddir/tests/mgcp/mgcpgw_client_test], [], [expout], [experr])
+AT_SETUP([legacy_mgcpgw_client])
+AT_KEYWORDS([legacy_mgcpgw_client])
+cat $abs_srcdir/legacy_mgcp/mgcpgw_client_test.ok > expout
+cat $abs_srcdir/legacy_mgcp/mgcpgw_client_test.err > experr
+AT_CHECK([$abs_top_builddir/tests/legacy_mgcp/mgcpgw_client_test], [], [expout], [experr])
 AT_CLEANUP

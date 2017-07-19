@@ -118,16 +118,16 @@ dnl Generate the output
 AM_CONFIG_HEADER(bscconfig.h)
 
 AC_OUTPUT(
-    libosmo-mgcp.pc
+    libosmo-legacy-mgcp.pc
     include/Makefile
     include/osmocom/Makefile
-    include/osmocom/mgcp/Makefile
+    include/osmocom/legacy_mgcp/Makefile
     src/Makefile
-    src/libosmo-mgcp/Makefile
+    src/libosmo-legacy-mgcp/Makefile
     src/osmo-bsc_mgcp/Makefile
     tests/Makefile
     tests/atlocal
-    tests/mgcp/Makefile
+    tests/legacy_mgcp/Makefile
     doc/Makefile
     doc/examples/Makefile
     Makefile)
