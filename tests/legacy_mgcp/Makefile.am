@@ -8,11 +8,9 @@ AM_CFLAGS = \
 	-Wall \
 	-ggdb3 \
 	$(LIBOSMOCORE_CFLAGS) \
-	$(LIBOSMOGSM_FLAGS) \
 	$(LIBOSMONETIF_CFLAGS) \
-	$(LIBOSMOSCCP_CFLAGS) \
-	$(COVERAGE_CFLAGS) \
 	$(LIBBCG729_CFLAGS) \
+	$(COVERAGE_CFLAGS) \
 	$(NULL)
 
 AM_LDFLAGS = \
@@ -42,13 +40,10 @@ mgcp_test_SOURCES = \
 mgcp_test_LDADD = \
 	$(top_builddir)/src/libosmo-legacy-mgcp/libosmo-legacy-mgcp.la \
 	$(LIBOSMOCORE_LIBS) \
-	$(LIBOSMOGSM_LIBS) \
-	$(LIBOSMOSCCP_LIBS) \
 	$(LIBOSMOVTY_LIBS) \
 	$(LIBRARY_DL) \
 	$(LIBOSMONETIF_LIBS) \
 	$(LIBRARY_GSM) \
-	-lrt \
 	-lm  \
 	$(NULL)
 
@@ -59,14 +54,11 @@ mgcp_transcoding_test_SOURCES = \
 mgcp_transcoding_test_LDADD = \
 	$(top_builddir)/src/libosmo-legacy-mgcp/libosmo-legacy-mgcp.la \
 	$(LIBOSMOCORE_LIBS) \
-	$(LIBOSMOGSM_LIBS) \
-	$(LIBBCG729_LIBS) \
-	$(LIBOSMOSCCP_LIBS) \
 	$(LIBOSMOVTY_LIBS) \
+	$(LIBBCG729_LIBS) \
 	$(LIBRARY_DL) \
 	$(LIBOSMONETIF_LIBS) \
 	$(LIBRARY_GSM) \
-	-lrt \
 	-lm \
 	$(NULL)
 
@@ -77,12 +69,8 @@ mgcpgw_client_test_SOURCES = \
 mgcpgw_client_test_LDADD = \
 	$(top_builddir)/src/libosmo-legacy-mgcp/libosmo-legacy-mgcp.la \
 	$(LIBOSMOCORE_LIBS) \
-	$(LIBOSMOGSM_LIBS) \
-	$(LIBOSMOSCCP_LIBS) \
 	$(LIBOSMOVTY_LIBS) \
 	$(LIBRARY_DL) \
 	$(LIBOSMONETIF_LIBS) \
 	$(LIBRARY_GSM) \
-	-lrt \
-	-lm  \
 	$(NULL)
