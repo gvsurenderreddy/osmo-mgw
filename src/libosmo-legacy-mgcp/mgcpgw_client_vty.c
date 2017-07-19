@@ -25,6 +25,7 @@
 #include <talloc.h>
 
 #include <osmocom/vty/command.h>
+#include <osmocom/core/utils.h>
 
 #include <osmocom/legacy_mgcp/vty.h>
 #include <osmocom/legacy_mgcp/mgcpgw_client.h>

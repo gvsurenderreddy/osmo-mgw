@@ -18,6 +18,7 @@
  *
  */
 
+#include <osmocom/core/linuxlist.h>
 #include <osmocom/core/select.h>
 #include <osmocom/core/write_queue.h>
 #include <osmocom/core/msgb.h>
@@ -33,6 +34,47 @@
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
+
+/* When changed, also remember to update the unit test */
+#define MSGB_CB_MGCP_TRANS_ID 0
+
+typedef unsigned int mgcp_trans_id_t;
+
+struct mgcpgw_client {
+	struct mgcpgw_client_conf actual;
+	uint32_t remote_addr;
+	struct osmo_wqueue wq;
+	mgcp_trans_id_t next_trans_id;
+	struct llist_head responses_pending;
+	struct llist_head inuse_endpoints;
+};
+
+struct mgcp_response_head {
+       int response_code;
+       mgcp_trans_id_t trans_id;
+       const char *comment;
+};
+
+struct mgcp_response {
+	char *body;
+	struct mgcp_response_head head;
+	uint16_t audio_port;
+};
+
+struct mgcp_inuse_endpoint {
+	struct llist_head entry;
+	uint16_t id;
+};
+
+struct mgcp_response_pending {
+	struct llist_head entry;
+
+	mgcp_trans_id_t trans_id;
+	mgcp_response_cb_t response_cb;
+	void *priv;
+};
+
+
 
 void mgcpgw_client_conf_init(struct mgcpgw_client_conf *conf)
 {
