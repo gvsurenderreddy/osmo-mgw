@@ -21,6 +21,20 @@ struct mgcpgw_client_conf {
 	uint16_t bts_base;
 };
 
+typedef unsigned int mgcp_trans_id_t;
+
+struct mgcp_response_head {
+       int response_code;
+       mgcp_trans_id_t trans_id;
+       const char *comment;
+};
+
+struct mgcp_response {
+	char *body;
+	struct mgcp_response_head head;
+	uint16_t audio_port;
+};
+
 void mgcpgw_client_conf_init(struct mgcpgw_client_conf *conf);
 void mgcpgw_client_vty_init(void *talloc_ctx, int node, struct mgcpgw_client_conf *conf);
 int mgcpgw_client_config_write(struct vty *vty, const char *indent);
@@ -37,12 +51,10 @@ uint32_t mgcpgw_client_remote_addr_n(struct mgcpgw_client *mgcp);
 int mgcpgw_client_next_endpoint(struct mgcpgw_client *client);
 void mgcpgw_client_release_endpoint(uint16_t id, struct mgcpgw_client *client);
 
-
-struct mgcp_response;
-
 /* Invoked when an MGCP response is received or sending failed.  When the
  * response is passed as NULL, this indicates failure during transmission. */
 typedef void (* mgcp_response_cb_t )(struct mgcp_response *response, void *priv);
+int mgcp_response_parse_params(struct mgcp_response *r);
 
 int mgcpgw_client_tx(struct mgcpgw_client *mgcp, struct msgb *msg,
 		     mgcp_response_cb_t response_cb, void *priv);
