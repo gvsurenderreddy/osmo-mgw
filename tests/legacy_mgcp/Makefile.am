@@ -40,7 +40,7 @@ mgcp_test_SOURCES = \
 	$(NULL)
 
 mgcp_test_LDADD = \
-	$(top_builddir)/src/libosmo-mgcp/libosmo-mgcp.la \
+	$(top_builddir)/src/libosmo-legacy-mgcp/libosmo-legacy-mgcp.la \
 	$(LIBOSMOCORE_LIBS) \
 	$(LIBOSMOGSM_LIBS) \
 	$(LIBOSMOSCCP_LIBS) \
@@ -57,7 +57,7 @@ mgcp_transcoding_test_SOURCES = \
 	$(NULL)
 
 mgcp_transcoding_test_LDADD = \
-	$(top_builddir)/src/libosmo-mgcp/libosmo-mgcp.la \
+	$(top_builddir)/src/libosmo-legacy-mgcp/libosmo-legacy-mgcp.la \
 	$(LIBOSMOCORE_LIBS) \
 	$(LIBOSMOGSM_LIBS) \
 	$(LIBBCG729_LIBS) \
@@ -75,7 +75,7 @@ mgcpgw_client_test_SOURCES = \
 	$(NULL)
 
 mgcpgw_client_test_LDADD = \
-	$(top_builddir)/src/libosmo-mgcp/libosmo-mgcp.la \
+	$(top_builddir)/src/libosmo-legacy-mgcp/libosmo-legacy-mgcp.la \
 	$(LIBOSMOCORE_LIBS) \
 	$(LIBOSMOGSM_LIBS) \
 	$(LIBOSMOSCCP_LIBS) \
