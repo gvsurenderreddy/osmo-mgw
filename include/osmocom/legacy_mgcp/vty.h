@@ -16,8 +16,8 @@ extern struct cmd_element cfg_description_cmd;
 extern struct cmd_element cfg_no_description_cmd;
 
 enum mgcp_vty_node {
-	MGCP_NODE,
-	TRUNK_NODE,
+	MGCP_NODE = _LAST_OSMOVTY_NODE + 1,
+	TRUNK_NODE = _LAST_OSMOVTY_NODE + 2,
 };
 
 struct log_info;
