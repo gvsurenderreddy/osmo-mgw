@@ -143,7 +143,6 @@ struct mgcp_lco {
 
 enum mgcp_type {
 	MGCP_RTP_DEFAULT	= 0,
-	MGCP_RTP_TRANSCODED,
 	MGCP_OSMUX_BSC,
 	MGCP_OSMUX_BSC_NAT,
 };
@@ -213,20 +212,12 @@ struct mgcp_endpoint {
 	int conn_mode;
 	int orig_mode;
 
-	/* indexes: bts=0, net=1 */
 	struct llist_head conns;
 
 	/* backpointer */
 	struct mgcp_config *cfg;
 	struct mgcp_trunk_config *tcfg;
 
-	/*
-	 * For transcoding we will send from the local_port
-	 * of trans_bts and it will arrive at trans_net from
-	 * where we will forward it to the network.
-	 */
-	struct mgcp_rtp_end trans_bts;
-	struct mgcp_rtp_end trans_net;
 	enum mgcp_type type;
 
 	/* fields for re-transmission */
