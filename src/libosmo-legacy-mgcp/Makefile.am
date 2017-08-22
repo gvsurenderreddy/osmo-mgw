@@ -41,6 +41,7 @@ libosmo_legacy_mgcp_la_SOURCES = \
 	mgcp_vty.c \
 	mgcp_osmux.c \
 	mgcp_sdp.c \
+	mgcp_conn.c \
 	$(NULL)
 if BUILD_MGCP_TRANSCODING
 libosmo_legacy_mgcp_la_SOURCES += \

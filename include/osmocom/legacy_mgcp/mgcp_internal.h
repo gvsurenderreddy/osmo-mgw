@@ -23,10 +23,15 @@
 #pragma once
 
 #include <string.h>
-
+#include <inttypes.h>
 #include <osmocom/core/select.h>
+#include <osmocom/legacy_mgcp/mgcp.h>
+#include <osmocom/core/linuxlist.h>
 
 #define CI_UNUSED 0
+
+#define CONN_ID_BTS 0
+#define CONN_ID_NET 1
 
 enum mgcp_trunk_type {
 	MGCP_TRUNK_VIRTUAL,
@@ -145,42 +150,16 @@ enum mgcp_type {
 
 #include <osmocom/legacy_mgcp/osmux.h>
 
-struct mgcp_endpoint {
-	int allocated;
-	uint32_t ci;
-	char *callid;
-	struct mgcp_lco local_options;
-	int conn_mode;
-	int orig_mode;
+/* MGCP connection (RTP) */
+struct mgcp_conn_rtp {
 
-	/* backpointer */
-	struct mgcp_config *cfg;
-	struct mgcp_trunk_config *tcfg;
+	/* Port status */
+	struct mgcp_rtp_end end;
 
-	/* port status for bts/net */
-	struct mgcp_rtp_end bts_end;
-	struct mgcp_rtp_end net_end;
+	/* Sequence bits */
+	struct mgcp_rtp_state state;
 
-	/*
-	 * For transcoding we will send from the local_port
-	 * of trans_bts and it will arrive at trans_net from
-	 * where we will forward it to the network.
-	 */
-	struct mgcp_rtp_end trans_bts;
-	struct mgcp_rtp_end trans_net;
-	enum mgcp_type type;
-
-	/* sequence bits */
-	struct mgcp_rtp_state net_state;
-	struct mgcp_rtp_state bts_state;
-
-	/* fields for re-transmission */
-	char *last_trans;
-	char *last_response;
-
-	/* tap for the endpoint */
-	struct mgcp_rtp_tap taps[MGCP_TAP_COUNT];
-
+	/* Osmux states (optional) */
 	struct {
 		/* Osmux state: disabled, activating, active */
 		enum osmux_state state;
@@ -200,10 +179,69 @@ struct mgcp_endpoint {
 	} osmux;
 };
 
+/*! Connection type, specifies which member of the union "u" in mgcp_conn
+ *  contains a useful connection description (currently only RTP) */
+enum mgcp_conn_type {
+	MGCP_CONN_TYPE_RTP,
+};
+
+/*! MGCP connection (untyped) */
+struct mgcp_conn {
+	/*!< list head */
+	struct llist_head entry;
+
+	/*!< type of the connection (union) */
+	enum mgcp_conn_type type;
+
+	/*!< connection id to identify the conntion */
+	uint32_t id;
+
+	/*!< union with connection description */
+	union {
+		struct mgcp_conn_rtp rtp;
+	} u;
+};
+
+
+#include <osmocom/legacy_mgcp/mgcp_conn.h>
+
+struct mgcp_endpoint {
+	int allocated;
+	uint32_t ci;
+	char *callid;
+	struct mgcp_lco local_options;
+	int conn_mode;
+	int orig_mode;
+
+	/* indexes: bts=0, net=1 */
+	struct llist_head conns;
+
+	/* backpointer */
+	struct mgcp_config *cfg;
+	struct mgcp_trunk_config *tcfg;
+
+	/*
+	 * For transcoding we will send from the local_port
+	 * of trans_bts and it will arrive at trans_net from
+	 * where we will forward it to the network.
+	 */
+	struct mgcp_rtp_end trans_bts;
+	struct mgcp_rtp_end trans_net;
+	enum mgcp_type type;
+
+	/* fields for re-transmission */
+	char *last_trans;
+	char *last_response;
+
+	/* tap for the endpoint */
+	struct mgcp_rtp_tap taps[MGCP_TAP_COUNT];
+};
+
 #define for_each_line(line, save)			\
 	for (line = strline_r(NULL, &save); line;\
 	     line = strline_r(NULL, &save))
 
+/* TODO: REPLACED, REMOVE */
 static inline char *strline_r(char *str, char **saveptr)
 {
 	char *result;
