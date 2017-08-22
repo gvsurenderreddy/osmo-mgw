@@ -243,6 +243,8 @@ static int write_response_sdp(struct mgcp_endpoint *endp,
 	int payload_type;
 	int len;
 	int nchars;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
 
 	endp->cfg->get_net_downlink_format_cb(endp, &payload_type,
 					      &audio_name, &fmtp_extra);
@@ -258,10 +260,15 @@ static int write_response_sdp(struct mgcp_endpoint *endp,
 	if (len < 0 || len >= size)
 		goto buffer_too_small;
 
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_bts || !conn_net)
+		return -1;
+
 	if (payload_type >= 0) {
 		nchars = snprintf(sdp_record + len, size - len,
 				  "m=audio %d RTP/AVP %d\r\n",
-				  endp->net_end.local_port, payload_type);
+				  conn_net->end.local_port, payload_type);
 		if (nchars < 0 || nchars >= size - len)
 			goto buffer_too_small;
 
@@ -288,10 +295,10 @@ static int write_response_sdp(struct mgcp_endpoint *endp,
 			len += nchars;
 		}
 	}
-	if (endp->bts_end.packet_duration_ms > 0 && endp->tcfg->audio_send_ptime) {
+	if (conn_bts->end.packet_duration_ms > 0 && endp->tcfg->audio_send_ptime) {
 		nchars = snprintf(sdp_record + len, size - len,
 				  "a=ptime:%d\r\n",
-				  endp->bts_end.packet_duration_ms);
+				  conn_bts->end.packet_duration_ms);
 		if (nchars < 0 || nchars >= size - len)
 			goto buffer_too_small;
 
@@ -314,13 +321,18 @@ static struct msgb *create_response_with_sdp(struct mgcp_endpoint *endp,
 	int len;
 	int nchars;
 	char osmux_extension[strlen("\nX-Osmux: 255") + 1];
+	struct mgcp_conn_rtp *conn_net = NULL;
 
 	if (!addr)
 		addr = mgcp_net_src_addr(endp);
 
-	if (endp->osmux.state == OSMUX_STATE_NEGOTIATING) {
-		sprintf(osmux_extension, "\nX-Osmux: %u", endp->osmux.cid);
-		endp->osmux.state = OSMUX_STATE_ACTIVATING;
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_net)
+		return NULL;
+
+	if (conn_net->osmux.state == OSMUX_STATE_NEGOTIATING) {
+		sprintf(osmux_extension, "\nX-Osmux: %u", conn_net->osmux.cid);
+		conn_net->osmux.state = OSMUX_STATE_ACTIVATING;
 	} else {
 		osmux_extension[0] = '\0';
 	}
@@ -344,7 +356,13 @@ static struct msgb *create_response_with_sdp(struct mgcp_endpoint *endp,
 
 static void send_dummy(struct mgcp_endpoint *endp)
 {
-	if (endp->osmux.state != OSMUX_STATE_DISABLED)
+	struct mgcp_conn_rtp *conn_net = NULL;
+
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_net)
+		return;
+
+	if (conn_net->osmux.state != OSMUX_STATE_DISABLED)
 		osmux_send_dummy(endp);
 	else
 		mgcp_send_dummy(endp);
@@ -561,7 +579,15 @@ static struct msgb *handle_audit_endpoint(struct mgcp_parse_data *p)
 
 static int parse_conn_mode(const char *msg, struct mgcp_endpoint *endp)
 {
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
 	int ret = 0;
+
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_bts || !conn_net)
+		return -1;
+
 	if (strcmp(msg, "recvonly") == 0)
 		endp->conn_mode = MGCP_CONN_RECV_ONLY;
 	else if (strcmp(msg, "sendrecv") == 0)
@@ -575,15 +601,15 @@ static int parse_conn_mode(const char *msg, struct mgcp_endpoint *endp)
 		ret = -1;
 	}
 
-	endp->net_end.output_enabled =
+	conn_net->end.output_enabled =
 		endp->conn_mode & MGCP_CONN_SEND_ONLY ? 1 : 0;
-	endp->bts_end.output_enabled =
+	conn_bts->end.output_enabled =
 		endp->conn_mode & MGCP_CONN_RECV_ONLY ? 1 : 0;
 
 	LOGP(DLMGCP, LOGL_DEBUG, "endpoint %x connection mode '%s' %d output_enabled net %d bts %d\n",
 	     ENDPOINT_NUMBER(endp),
-	     msg, endp->conn_mode, endp->net_end.output_enabled,
-	     endp->bts_end.output_enabled);
+	     msg, endp->conn_mode, conn_net->end.output_enabled,
+	     conn_bts->end.output_enabled);
 
 	return ret;
 }
@@ -623,13 +649,21 @@ static int allocate_port(struct mgcp_endpoint *endp, struct mgcp_rtp_end *end,
 
 static int allocate_ports(struct mgcp_endpoint *endp)
 {
-	if (allocate_port(endp, &endp->net_end, &endp->cfg->net_ports,
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
+
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_bts || !conn_net)
+		return -1;
+
+	if (allocate_port(endp, &conn_net->end, &endp->cfg->net_ports,
 			  mgcp_bind_net_rtp_port) != 0)
 		return -1;
 
-	if (allocate_port(endp, &endp->bts_end, &endp->cfg->bts_ports,
+	if (allocate_port(endp, &conn_bts->end, &endp->cfg->bts_ports,
 			  mgcp_bind_bts_rtp_port) != 0) {
-		mgcp_rtp_end_reset(&endp->net_end);
+		mgcp_rtp_end_reset(&conn_net->end);
 		return -1;
 	}
 
@@ -637,16 +671,16 @@ static int allocate_ports(struct mgcp_endpoint *endp)
 		if (allocate_port(endp, &endp->trans_net,
 				  &endp->cfg->transcoder_ports,
 				  mgcp_bind_trans_net_rtp_port) != 0) {
-			mgcp_rtp_end_reset(&endp->net_end);
-			mgcp_rtp_end_reset(&endp->bts_end);
+			mgcp_rtp_end_reset(&conn_net->end);
+			mgcp_rtp_end_reset(&conn_bts->end);
 			return -1;
 		}
 
 		if (allocate_port(endp, &endp->trans_bts,
 				  &endp->cfg->transcoder_ports,
 				  mgcp_bind_trans_bts_rtp_port) != 0) {
-			mgcp_rtp_end_reset(&endp->net_end);
-			mgcp_rtp_end_reset(&endp->bts_end);
+			mgcp_rtp_end_reset(&conn_net->end);
+			mgcp_rtp_end_reset(&conn_bts->end);
 			mgcp_rtp_end_reset(&endp->trans_net);
 			return -1;
 		}
@@ -759,6 +793,8 @@ static struct msgb *handle_create_con(struct mgcp_parse_data *p)
 	const char *mode = NULL;
 	char *line;
 	int have_sdp = 0, osmux_cid = -1;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
 
 	if (p->found != 0)
 		return create_err_response(NULL, 510, "CRCX", p->trans);
@@ -834,12 +870,22 @@ mgcp_header_done:
 	}
 
 	/* initialize */
-	endp->net_end.rtp_port = endp->net_end.rtcp_port = endp->bts_end.rtp_port = endp->bts_end.rtcp_port = 0;
-	mgcp_rtp_end_config(endp, 0, &endp->net_end);
-	mgcp_rtp_end_config(endp, 0, &endp->bts_end);
+	/* Note: This would be a good location to allocate the rtp
+	 * connections dynamically */
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_bts || !conn_net)
+		goto error2;
+
+	conn_net->end.rtp_port = 0;
+	conn_net->end.rtcp_port = 0;
+	conn_bts->end.rtp_port = 0;
+	conn_bts->end.rtcp_port = 0;
+	mgcp_rtp_end_config(endp, 0, &conn_net->end);
+	mgcp_rtp_end_config(endp, 0, &conn_bts->end);
 
 	/* set to zero until we get the info */
-	memset(&endp->net_end.addr, 0, sizeof(endp->net_end.addr));
+	memset(&conn_net->end.addr, 0, sizeof(conn_net->end.addr));
 
 	/* bind to the port now */
 	if (allocate_ports(endp) != 0)
@@ -853,10 +899,10 @@ mgcp_header_done:
 	/* Annotate Osmux circuit ID and set it to negotiating state until this
 	 * is fully set up from the dummy load.
 	 */
-	endp->osmux.state = OSMUX_STATE_DISABLED;
+	conn_net->osmux.state = OSMUX_STATE_DISABLED;
 	if (osmux_cid >= 0) {
-		endp->osmux.cid = osmux_cid;
-		endp->osmux.state = OSMUX_STATE_NEGOTIATING;
+		conn_net->osmux.cid = osmux_cid;
+		conn_net->osmux.state = OSMUX_STATE_NEGOTIATING;
 	} else if (endp->cfg->osmux == OSMUX_USAGE_ONLY) {
 		LOGP(DLMGCP, LOGL_ERROR,
 			"Osmux only and no osmux offered on 0x%x\n", ENDPOINT_NUMBER(endp));
@@ -866,18 +912,18 @@ mgcp_header_done:
 	endp->allocated = 1;
 
 	/* set up RTP media parameters */
-	mgcp_set_audio_info(p->cfg, &endp->bts_end.codec, tcfg->audio_payload, tcfg->audio_name);
-	endp->bts_end.fmtp_extra = talloc_strdup(tcfg->endpoints,
+	mgcp_set_audio_info(p->cfg, &conn_bts->end.codec, tcfg->audio_payload, tcfg->audio_name);
+	conn_bts->end.fmtp_extra = talloc_strdup(tcfg->endpoints,
 						tcfg->audio_fmtp_extra);
 	if (have_sdp)
-		mgcp_parse_sdp_data(endp, &endp->net_end, p);
+		mgcp_parse_sdp_data(endp, &conn_net->end, p);
 	else if (endp->local_options.codec)
-		mgcp_set_audio_info(p->cfg, &endp->net_end.codec,
+		mgcp_set_audio_info(p->cfg, &conn_net->end.codec,
 			       PTYPE_UNDEFINED, endp->local_options.codec);
 
 	if (p->cfg->bts_force_ptime) {
-		endp->bts_end.packet_duration_ms = p->cfg->bts_force_ptime;
-		endp->bts_end.force_output_ptime = 1;
+		conn_bts->end.packet_duration_ms = p->cfg->bts_force_ptime;
+		conn_bts->end.force_output_ptime = 1;
 	}
 
 	if (setup_rtp_processing(endp) != 0)
@@ -908,7 +954,7 @@ mgcp_header_done:
 
 	LOGP(DLMGCP, LOGL_DEBUG, "Creating endpoint on: 0x%x CI: %u port: %u/%u\n",
 		ENDPOINT_NUMBER(endp), endp->ci,
-		endp->net_end.local_port, endp->bts_end.local_port);
+		conn_net->end.local_port, conn_bts->end.local_port);
 	if (p->cfg->change_cb)
 		p->cfg->change_cb(tcfg, ENDPOINT_NUMBER(endp), MGCP_ENDP_CRCX);
 
@@ -932,6 +978,8 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 	int have_sdp = 0;
 	char *line;
 	const char *local_options = NULL;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
 
 	if (p->found != 0)
 		return create_err_response(NULL, 510, "MDCX", p->trans);
@@ -941,6 +989,11 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 			"holding a connection. 0x%x\n", ENDPOINT_NUMBER(endp));
 		return create_err_response(endp, 400, "MDCX", p->trans);
 	}
+
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_bts || !conn_net)
+		return create_err_response(endp, 400, "MDCX", p->trans);
 
 	for_each_line(line, p->save) {
 		if (!mgcp_check_param(endp, line))
@@ -973,7 +1026,7 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 		case '\0':
 			/* SDP file begins */
 			have_sdp = 1;
-			mgcp_parse_sdp_data(endp, &endp->net_end, p);
+			mgcp_parse_sdp_data(endp, &conn_net->end, p);
 			/* This will exhaust p->save, so the loop will
 			 * terminate next time.
 			 */
@@ -989,7 +1042,7 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 			     local_options);
 
 	if (!have_sdp && endp->local_options.codec)
-		mgcp_set_audio_info(p->cfg, &endp->net_end.codec,
+		mgcp_set_audio_info(p->cfg, &conn_net->end.codec,
 			       PTYPE_UNDEFINED, endp->local_options.codec);
 
 	if (setup_rtp_processing(endp) != 0)
@@ -1020,12 +1073,12 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 		}
 	}
 
-	mgcp_rtp_end_config(endp, 1, &endp->net_end);
-	mgcp_rtp_end_config(endp, 1, &endp->bts_end);
+	mgcp_rtp_end_config(endp, 1, &conn_net->end);
+	mgcp_rtp_end_config(endp, 1, &conn_bts->end);
 
 	/* modify */
 	LOGP(DLMGCP, LOGL_DEBUG, "Modified endpoint on: 0x%x Server: %s:%u\n",
-		ENDPOINT_NUMBER(endp), inet_ntoa(endp->net_end.addr), ntohs(endp->net_end.rtp_port));
+		ENDPOINT_NUMBER(endp), inet_ntoa(conn_net->end.addr), ntohs(conn_net->end.rtp_port));
 	if (p->cfg->change_cb)
 		p->cfg->change_cb(endp->tcfg, ENDPOINT_NUMBER(endp), MGCP_ENDP_MDCX);
 
@@ -1055,6 +1108,7 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 	int silent = 0;
 	char *line;
 	char stats[1048];
+	struct mgcp_conn_rtp *conn_net = NULL;
 
 	if (p->found != 0)
 		return create_err_response(NULL, error_code, "DLCX", p->trans);
@@ -1113,8 +1167,16 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 	}
 
 	/* free the connection */
-	LOGP(DLMGCP, LOGL_DEBUG, "Deleted endpoint on: 0x%x Server: %s:%u\n",
-		ENDPOINT_NUMBER(endp), inet_ntoa(endp->net_end.addr), ntohs(endp->net_end.rtp_port));
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (conn_net) {
+		LOGP(DLMGCP, LOGL_DEBUG, "Deleted endpoint on: 0x%x Server: %s:%u\n",
+		     ENDPOINT_NUMBER(endp),
+		     inet_ntoa(conn_net->end.addr),
+		     ntohs(conn_net->end.rtp_port));
+	} else {
+		LOGP(DLMGCP, LOGL_ERROR, "No RTP connection present, deleted endpoint: 0x%x\n",
+		     ENDPOINT_NUMBER(endp));
+	}
 
 	/* save the statistics of the current call */
 	mgcp_format_stats(endp, stats, sizeof(stats));
@@ -1348,6 +1410,8 @@ static void mgcp_rtp_end_init(struct mgcp_rtp_end *end)
 int mgcp_endpoints_allocate(struct mgcp_trunk_config *tcfg)
 {
 	int i;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
 
 	/* Initialize all endpoints */
 	tcfg->endpoints = _talloc_zero_array(tcfg->cfg,
@@ -1357,12 +1421,20 @@ int mgcp_endpoints_allocate(struct mgcp_trunk_config *tcfg)
 		return -1;
 
 	for (i = 0; i < tcfg->number_endpoints; ++i) {
-		tcfg->endpoints[i].osmux.allocated_cid = -1;
+		INIT_LLIST_HEAD(&tcfg->endpoints[i].conns);
+		mgcp_conn_alloc(NULL, &tcfg->endpoints[i].conns, CONN_ID_BTS, MGCP_CONN_TYPE_RTP);
+		mgcp_conn_alloc(NULL, &tcfg->endpoints[i].conns, CONN_ID_NET, MGCP_CONN_TYPE_RTP);
+		conn_net = mgcp_conn_get_rtp(&tcfg->endpoints[i].conns, CONN_ID_NET);
+		OSMO_ASSERT(conn_net);
+		conn_bts = mgcp_conn_get_rtp(&tcfg->endpoints[i].conns, CONN_ID_BTS);
+		OSMO_ASSERT(conn_bts);
+
+		conn_net->osmux.allocated_cid = -1;
 		tcfg->endpoints[i].ci = CI_UNUSED;
 		tcfg->endpoints[i].cfg = tcfg->cfg;
 		tcfg->endpoints[i].tcfg = tcfg;
-		mgcp_rtp_end_init(&tcfg->endpoints[i].net_end);
-		mgcp_rtp_end_init(&tcfg->endpoints[i].bts_end);
+		mgcp_rtp_end_init(&conn_net->end);
+		mgcp_rtp_end_init(&conn_bts->end);
 		mgcp_rtp_end_init(&tcfg->endpoints[i].trans_net);
 		mgcp_rtp_end_init(&tcfg->endpoints[i].trans_bts);
 	}
@@ -1372,6 +1444,9 @@ int mgcp_endpoints_allocate(struct mgcp_trunk_config *tcfg)
 
 void mgcp_release_endp(struct mgcp_endpoint *endp)
 {
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
+
 	LOGP(DLMGCP, LOGL_DEBUG, "Releasing endpoint on: 0x%x\n", ENDPOINT_NUMBER(endp));
 	endp->ci = CI_UNUSED;
 	endp->allocated = 0;
@@ -1384,18 +1459,29 @@ void mgcp_release_endp(struct mgcp_endpoint *endp)
 	talloc_free(endp->local_options.codec);
 	endp->local_options.codec = NULL;
 
-	mgcp_rtp_end_reset(&endp->bts_end);
-	mgcp_rtp_end_reset(&endp->net_end);
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (conn_bts && conn_net) {
+		mgcp_rtp_end_reset(&conn_bts->end);
+		mgcp_rtp_end_reset(&conn_net->end);
+	}
+
 	mgcp_rtp_end_reset(&endp->trans_net);
 	mgcp_rtp_end_reset(&endp->trans_bts);
 	endp->type = MGCP_RTP_DEFAULT;
 
-	memset(&endp->net_state, 0, sizeof(endp->net_state));
-	memset(&endp->bts_state, 0, sizeof(endp->bts_state));
+	/* Note: This would be a good location to free the rtp
+	 * connections, currently the memory is statically allocated,
+	 * so we go for memsetting it */
+
+	if (conn_bts && conn_net) {
+		memset(&conn_net->state, 0, sizeof(conn_net->state));
+		memset(&conn_bts->state, 0, sizeof(conn_bts->state));
+	}
 
 	endp->conn_mode = endp->orig_mode = MGCP_CONN_NONE;
 
-	if (endp->osmux.state == OSMUX_STATE_ENABLED)
+	if (conn_net->osmux.state == OSMUX_STATE_ENABLED)
 		osmux_disable_endpoint(endp);
 
 	/* release the circuit ID if it had been allocated */
@@ -1502,6 +1588,13 @@ static int setup_rtp_processing(struct mgcp_endpoint *endp)
 {
 	int rc = 0;
 	struct mgcp_config *cfg = endp->cfg;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
+
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_bts || !conn_net)
+		return -1;
 
 	if (endp->type != MGCP_RTP_DEFAULT)
 		return 0;
@@ -1510,14 +1603,14 @@ static int setup_rtp_processing(struct mgcp_endpoint *endp)
 		return 0;
 
 	if (endp->conn_mode & MGCP_CONN_SEND_ONLY)
-		rc |= cfg->setup_rtp_processing_cb(endp, &endp->net_end, &endp->bts_end);
+		rc |= cfg->setup_rtp_processing_cb(endp, &conn_net->end, &conn_bts->end);
 	else
-		rc |= cfg->setup_rtp_processing_cb(endp, &endp->net_end, NULL);
+		rc |= cfg->setup_rtp_processing_cb(endp, &conn_net->end, NULL);
 
 	if (endp->conn_mode & MGCP_CONN_RECV_ONLY)
-		rc |= cfg->setup_rtp_processing_cb(endp, &endp->bts_end, &endp->net_end);
+		rc |= cfg->setup_rtp_processing_cb(endp, &conn_bts->end, &conn_net->end);
 	else
-		rc |= cfg->setup_rtp_processing_cb(endp, &endp->bts_end, NULL);
+		rc |= cfg->setup_rtp_processing_cb(endp, &conn_bts->end, NULL);
 	return rc;
 }
 
@@ -1573,14 +1666,22 @@ void mgcp_format_stats(struct mgcp_endpoint *endp, char *msg, size_t size)
 	uint32_t expected, jitter;
 	int ploss;
 	int nchars;
-	mgcp_state_calc_loss(&endp->net_state, &endp->net_end,
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
+
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_bts || !conn_net)
+		return;
+
+	mgcp_state_calc_loss(&conn_net->state, &conn_net->end,
 				&expected, &ploss);
-	jitter = mgcp_state_calc_jitter(&endp->net_state);
+	jitter = mgcp_state_calc_jitter(&conn_net->state);
 
 	nchars = snprintf(msg, size,
 			  "\r\nP: PS=%u, OS=%u, PR=%u, OR=%u, PL=%d, JI=%u",
-			  endp->bts_end.packets, endp->bts_end.octets,
-			  endp->net_end.packets, endp->net_end.octets,
+			  conn_bts->end.packets, conn_bts->end.octets,
+			  conn_net->end.packets, conn_net->end.octets,
 			  ploss, jitter);
 	if (nchars < 0 || nchars >= size)
 		goto truncate;
@@ -1591,21 +1692,21 @@ void mgcp_format_stats(struct mgcp_endpoint *endp, char *msg, size_t size)
 	/* Error Counter */
 	nchars = snprintf(msg, size,
 			  "\r\nX-Osmo-CP: EC TIS=%u, TOS=%u, TIR=%u, TOR=%u",
-			  endp->net_state.in_stream.err_ts_counter,
-			  endp->net_state.out_stream.err_ts_counter,
-			  endp->bts_state.in_stream.err_ts_counter,
-			  endp->bts_state.out_stream.err_ts_counter);
+			  conn_net->state.in_stream.err_ts_counter,
+			  conn_net->state.out_stream.err_ts_counter,
+			  conn_bts->state.in_stream.err_ts_counter,
+			  conn_bts->state.out_stream.err_ts_counter);
 	if (nchars < 0 || nchars >= size)
 		goto truncate;
 
 	msg += nchars;
 	size -= nchars;
 
-	if (endp->osmux.state == OSMUX_STATE_ENABLED) {
+	if (conn_net->osmux.state == OSMUX_STATE_ENABLED) {
 		snprintf(msg, size,
 			 "\r\nX-Osmux-ST: CR=%u, BR=%u",
-			 endp->osmux.stats.chunks,
-			 endp->osmux.stats.octets);
+			 conn_net->osmux.stats.chunks,
+			 conn_net->osmux.stats.octets);
 	}
 truncate:
 	msg[size - 1] = '\0';

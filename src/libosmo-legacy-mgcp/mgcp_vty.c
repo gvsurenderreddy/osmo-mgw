@@ -192,9 +192,12 @@ static void dump_rtp_end(const char *end_name, struct vty *vty,
 		end->output_enabled, end->force_output_ptime, VTY_NEWLINE);
 }
 
-static void dump_trunk(struct vty *vty, struct mgcp_trunk_config *cfg, int verbose)
+static void dump_trunk(struct vty *vty, struct mgcp_trunk_config *cfg,
+		       int verbose)
 {
 	int i;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
 
 	vty_out(vty, "%s trunk nr %d with %d endpoints:%s",
 		cfg->trunk_type == MGCP_TRUNK_VIRTUAL ? "Virtual" : "E1",
@@ -207,20 +210,37 @@ static void dump_trunk(struct vty *vty, struct mgcp_trunk_config *cfg, int verbo
 
 	for (i = 1; i < cfg->number_endpoints; ++i) {
 		struct mgcp_endpoint *endp = &cfg->endpoints[i];
-		vty_out(vty,
-			" Endpoint 0x%.2x: CI: %d net: %u/%u bts: %u/%u on %s "
-			"traffic received bts: %u  remote: %u transcoder: %u/%u%s",
-			i, endp->ci,
-			ntohs(endp->net_end.rtp_port), ntohs(endp->net_end.rtcp_port),
-			ntohs(endp->bts_end.rtp_port), ntohs(endp->bts_end.rtcp_port),
-			inet_ntoa(endp->bts_end.addr),
-			endp->bts_end.packets, endp->net_end.packets,
-			endp->trans_net.packets, endp->trans_bts.packets,
-			VTY_NEWLINE);
 
-		if (verbose && endp->allocated) {
-			dump_rtp_end("Net->BTS", vty, &endp->bts_state, &endp->bts_end);
-			dump_rtp_end("BTS->Net", vty, &endp->net_state, &endp->net_end);
+		conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+		conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+		if (conn_bts && conn_net) {
+			vty_out(vty,
+				" Endpoint 0x%.2x: CI: %d net: %u/%u bts: %u/%u on %s "
+				"traffic received bts: %u  remote: %u transcoder: %u/%u%s",
+				i, endp->ci,
+				ntohs(conn_net->end.rtp_port),
+				ntohs(conn_net->end.rtcp_port),
+				ntohs(conn_bts->end.rtp_port),
+				ntohs(conn_bts->end.rtcp_port),
+				inet_ntoa(conn_bts->end.addr),
+				conn_bts->end.packets,
+				conn_net->end.packets,
+				endp->trans_net.packets,
+				endp->trans_bts.packets, VTY_NEWLINE);
+
+			if (verbose && endp->allocated) {
+				dump_rtp_end("Net->BTS", vty,
+					     &conn_bts->state,
+					     &conn_bts->end);
+				dump_rtp_end("BTS->Net", vty,
+					     &conn_net->state,
+					     &conn_net->end);
+			}
+
+		} else {
+			vty_out(vty,
+				" Endpoint 0x%.2x: CI: %d (no connection)%s",
+				i, endp->ci, VTY_NEWLINE);
 		}
 	}
 }
@@ -1088,6 +1108,8 @@ DEFUN(loop_endp,
 {
 	struct mgcp_trunk_config *trunk;
 	struct mgcp_endpoint *endp;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
 
 	trunk = find_trunk(g_cfg, atoi(argv[0]));
 	if (!trunk) {
@@ -1111,16 +1133,24 @@ DEFUN(loop_endp,
 
 
 	endp = &trunk->endpoints[endp_no];
-	int loop = atoi(argv[2]);
 
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_bts || !conn_net) {
+		vty_out(vty, "%%No RTP connection present on endpoint numer %u.%s",
+		        endp_no, VTY_NEWLINE);
+		return CMD_WARNING;
+	}
+
+	int loop = atoi(argv[2]);
 	if (loop)
 		endp->conn_mode = MGCP_CONN_LOOPBACK;
 	else
 		endp->conn_mode = endp->orig_mode;
 
 	/* Handle it like a MDCX, switch on SSRC patching if enabled */
-	mgcp_rtp_end_config(endp, 1, &endp->bts_end);
-	mgcp_rtp_end_config(endp, 1, &endp->net_end);
+	mgcp_rtp_end_config(endp, 1, &conn_bts->end);
+	mgcp_rtp_end_config(endp, 1, &conn_net->end);
 
 	return CMD_SUCCESS;
 }
@@ -1443,10 +1473,72 @@ int mgcp_vty_init(void)
 	return 0;
 }
 
+static int early_bind(struct mgcp_endpoint *endp, struct mgcp_trunk_config *trunk)
+{
+	struct mgcp_config *cfg = trunk->cfg;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
+
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+
+	if (!conn_bts || !conn_net) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "RTP connections not yet initalized, Can not bind!\n");
+		return -1;
+	}
+
+	if (cfg->bts_ports.mode == PORT_ALLOC_STATIC) {
+		cfg->last_bts_port += 2;
+		if (mgcp_bind_bts_rtp_port(endp, cfg->last_bts_port) != 0) {
+			LOGP(DLMGCP, LOGL_FATAL,
+			     "Failed to bind: %d\n", cfg->last_bts_port);
+			return -1;
+		}
+
+		conn_bts->end.local_alloc = PORT_ALLOC_STATIC;
+	}
+
+	if (cfg->net_ports.mode == PORT_ALLOC_STATIC) {
+		cfg->last_net_port += 2;
+		if (mgcp_bind_net_rtp_port(endp, cfg->last_net_port) != 0) {
+			LOGP(DLMGCP, LOGL_FATAL,
+			     "Failed to bind: %d\n", cfg->last_net_port);
+			return -1;
+		}
+
+		conn_net->end.local_alloc = PORT_ALLOC_STATIC;
+	}
+
+	if (trunk->trunk_type == MGCP_TRUNK_VIRTUAL &&
+	    cfg->transcoder_ip && cfg->transcoder_ports.mode == PORT_ALLOC_STATIC) {
+		int rtp_port;
+
+		/* network side */
+		rtp_port = rtp_calculate_port(ENDPOINT_NUMBER(endp),
+					      cfg->transcoder_ports.base_port);
+		if (mgcp_bind_trans_net_rtp_port(endp, rtp_port) != 0) {
+			LOGP(DLMGCP, LOGL_FATAL, "Failed to bind: %d\n", rtp_port);
+			return -1;
+		}
+		endp->trans_net.local_alloc = PORT_ALLOC_STATIC;
+
+		/* bts side */
+		rtp_port = rtp_calculate_port(endp_back_channel(ENDPOINT_NUMBER(endp)),
+					      cfg->transcoder_ports.base_port);
+		if (mgcp_bind_trans_bts_rtp_port(endp, rtp_port) != 0) {
+			LOGP(DLMGCP, LOGL_FATAL, "Failed to bind: %d\n", rtp_port);
+			return -1;
+		}
+		endp->trans_bts.local_alloc = PORT_ALLOC_STATIC;
+	}
+
+	return 0;
+}
+
 static int allocate_trunk(struct mgcp_trunk_config *trunk)
 {
 	int i;
-	struct mgcp_config *cfg = trunk->cfg;
 
 	if (mgcp_endpoints_allocate(trunk) != 0) {
 		LOGP(DLMGCP, LOGL_ERROR,
@@ -1458,49 +1550,8 @@ static int allocate_trunk(struct mgcp_trunk_config *trunk)
 	/* early bind */
 	for (i = 1; i < trunk->number_endpoints; ++i) {
 		struct mgcp_endpoint *endp = &trunk->endpoints[i];
-
-		if (cfg->bts_ports.mode == PORT_ALLOC_STATIC) {
-			cfg->last_bts_port += 2;
-			if (mgcp_bind_bts_rtp_port(endp, cfg->last_bts_port) != 0) {
-				LOGP(DLMGCP, LOGL_FATAL,
-				     "Failed to bind: %d\n", cfg->last_bts_port);
-				return -1;
-			}
-			endp->bts_end.local_alloc = PORT_ALLOC_STATIC;
-		}
-
-		if (cfg->net_ports.mode == PORT_ALLOC_STATIC) {
-			cfg->last_net_port += 2;
-			if (mgcp_bind_net_rtp_port(endp, cfg->last_net_port) != 0) {
-				LOGP(DLMGCP, LOGL_FATAL,
-				     "Failed to bind: %d\n", cfg->last_net_port);
-				return -1;
-			}
-			endp->net_end.local_alloc = PORT_ALLOC_STATIC;
-		}
-
-		if (trunk->trunk_type == MGCP_TRUNK_VIRTUAL &&
-		    cfg->transcoder_ip && cfg->transcoder_ports.mode == PORT_ALLOC_STATIC) {
-			int rtp_port;
-
-			/* network side */
-			rtp_port = rtp_calculate_port(ENDPOINT_NUMBER(endp),
-						      cfg->transcoder_ports.base_port);
-			if (mgcp_bind_trans_net_rtp_port(endp, rtp_port) != 0) {
-				LOGP(DLMGCP, LOGL_FATAL, "Failed to bind: %d\n", rtp_port);
-				return -1;
-			}
-			endp->trans_net.local_alloc = PORT_ALLOC_STATIC;
-
-			/* bts side */
-			rtp_port = rtp_calculate_port(endp_back_channel(ENDPOINT_NUMBER(endp)),
-						      cfg->transcoder_ports.base_port);
-			if (mgcp_bind_trans_bts_rtp_port(endp, rtp_port) != 0) {
-				LOGP(DLMGCP, LOGL_FATAL, "Failed to bind: %d\n", rtp_port);
-				return -1;
-			}
-			endp->trans_bts.local_alloc = PORT_ALLOC_STATIC;
-		}
+		if (early_bind(endp, trunk) == -1)
+			return -1;
 	}
 
 	return 0;
