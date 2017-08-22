@@ -23,6 +23,7 @@
 #include <osmocom/legacy_mgcp/mgcp.h>
 #include <osmocom/legacy_mgcp/mgcp_internal.h>
 #include <osmocom/legacy_mgcp/osmux.h>
+#include <osmocom/legacy_mgcp/mgcp_conn.h>
 
 static struct osmo_fd osmux_fd;
 
@@ -155,6 +156,11 @@ int osmux_xfrm_to_osmux(int type, char *buf, int rc, struct mgcp_endpoint *endp)
 {
 	int ret;
 	struct msgb *msg;
+	struct mgcp_conn_rtp *conn_net = NULL;
+
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_net)
+		return 0;
 
 	msg = msgb_alloc(4096, "RTP");
 	if (!msg)
@@ -163,9 +169,9 @@ int osmux_xfrm_to_osmux(int type, char *buf, int rc, struct mgcp_endpoint *endp)
 	memcpy(msg->data, buf, rc);
 	msgb_put(msg, rc);
 
-	while ((ret = osmux_xfrm_input(endp->osmux.in, msg, endp->osmux.cid)) > 0) {
+	while ((ret = osmux_xfrm_input(conn_net->osmux.in, msg, conn_net->osmux.cid)) > 0) {
 		/* batch full, build and deliver it */
-		osmux_xfrm_input_deliver(endp->osmux.in);
+		osmux_xfrm_input_deliver(conn_net->osmux.in);
 	}
 	return 0;
 }
@@ -176,6 +182,8 @@ endpoint_lookup(struct mgcp_config *cfg, int cid,
 {
 	struct mgcp_endpoint *tmp = NULL;
 	int i;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
 
 	/* Lookup for the endpoint that corresponds to this port */
 	for (i=0; i<cfg->trunk.number_endpoints; i++) {
@@ -188,10 +196,12 @@ endpoint_lookup(struct mgcp_config *cfg, int cid,
 
 		switch(type) {
 		case MGCP_DEST_NET:
-			this = &tmp->net_end.addr;
+			conn_net = mgcp_conn_get_rtp(&tmp->conns, CONN_ID_NET);
+			this = &conn_net->end.addr;
 			break;
 		case MGCP_DEST_BTS:
-			this = &tmp->bts_end.addr;
+			conn_bts = mgcp_conn_get_rtp(&tmp->conns, CONN_ID_BTS);
+			this = &conn_bts->end.addr;
 			break;
 		default:
 			/* Should not ever happen */
@@ -199,7 +209,8 @@ endpoint_lookup(struct mgcp_config *cfg, int cid,
 			return NULL;
 		}
 
-		if (tmp->osmux.cid == cid && this->s_addr == from_addr->s_addr)
+		conn_net = mgcp_conn_get_rtp(&tmp->conns, CONN_ID_NET);
+		if (conn_net->osmux.cid == cid && this->s_addr == from_addr->s_addr)
 			return tmp;
 	}
 
@@ -211,13 +222,21 @@ endpoint_lookup(struct mgcp_config *cfg, int cid,
 static void scheduled_tx_net_cb(struct msgb *msg, void *data)
 {
 	struct mgcp_endpoint *endp = data;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
+
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_bts || !conn_net)
+		return;
+
 	struct sockaddr_in addr = {
-		.sin_addr = endp->net_end.addr,
-		.sin_port = endp->net_end.rtp_port,
+		.sin_addr = conn_net->end.addr,
+		.sin_port = conn_net->end.rtp_port,
 	};
 
-	endp->bts_end.octets += msg->len;
-	endp->bts_end.packets++;
+	conn_bts->end.octets += msg->len;
+	conn_bts->end.packets++;
 
 	mgcp_send(endp, MGCP_DEST_NET, 1, &addr, (char *)msg->data, msg->len);
 	msgb_free(msg);
@@ -226,13 +245,21 @@ static void scheduled_tx_net_cb(struct msgb *msg, void *data)
 static void scheduled_tx_bts_cb(struct msgb *msg, void *data)
 {
 	struct mgcp_endpoint *endp = data;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
+
+	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_bts || !conn_net)
+		return;
+
 	struct sockaddr_in addr = {
-		.sin_addr = endp->bts_end.addr,
-		.sin_port = endp->bts_end.rtp_port,
+		.sin_addr = conn_bts->end.addr,
+		.sin_port = conn_bts->end.rtp_port,
 	};
 
-	endp->net_end.octets += msg->len;
-	endp->net_end.packets++;
+	conn_net->end.octets += msg->len;
+	conn_net->end.packets++;
 
 	mgcp_send(endp, MGCP_DEST_BTS, 1, &addr, (char *)msg->data, msg->len);
 	msgb_free(msg);
@@ -271,6 +298,7 @@ int osmux_read_from_bsc_nat_cb(struct osmo_fd *ofd, unsigned int what)
 	struct sockaddr_in addr;
 	struct mgcp_config *cfg = ofd->data;
 	uint32_t rem;
+	struct mgcp_conn_rtp *conn_net = NULL;
 
 	msg = osmux_recv(ofd, &addr);
 	if (!msg)
@@ -287,17 +315,22 @@ int osmux_read_from_bsc_nat_cb(struct osmo_fd *ofd, unsigned int what)
 		/* Yes, we use MGCP_DEST_NET to locate the origin */
 		endp = endpoint_lookup(cfg, osmuxh->circuit_id,
 				       &addr.sin_addr, MGCP_DEST_NET);
+
+		conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+		if (!conn_net)
+			goto out;
+
 		if (!endp) {
 			LOGP(DLMGCP, LOGL_ERROR,
 			     "Cannot find an endpoint for circuit_id=%d\n",
 			     osmuxh->circuit_id);
 			goto out;
 		}
-		endp->osmux.stats.octets += osmux_chunk_length(msg, rem);
-		endp->osmux.stats.chunks++;
+		conn_net->osmux.stats.octets += osmux_chunk_length(msg, rem);
+		conn_net->osmux.stats.chunks++;
 		rem = msg->len;
 
-		osmux_xfrm_output(osmuxh, &endp->osmux.out, &list);
+		osmux_xfrm_output(osmuxh, &conn_net->osmux.out, &list);
 		osmux_tx_sched(&list, scheduled_tx_bts_cb, endp);
 	}
 out:
@@ -311,6 +344,7 @@ static int osmux_handle_dummy(struct mgcp_config *cfg, struct sockaddr_in *addr,
 {
 	struct mgcp_endpoint *endp;
 	uint8_t osmux_cid;
+	struct mgcp_conn_rtp *conn_net = NULL;
 
 	if (msg->len < 1 + sizeof(osmux_cid)) {
 		LOGP(DLMGCP, LOGL_ERROR,
@@ -337,7 +371,11 @@ static int osmux_handle_dummy(struct mgcp_config *cfg, struct sockaddr_in *addr,
 		goto out;
 	}
 
-	if (endp->osmux.state == OSMUX_STATE_ENABLED)
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_net)
+		goto out;
+
+	if (conn_net->osmux.state == OSMUX_STATE_ENABLED)
 		goto out;
 
 	if (osmux_enable_endpoint(endp, OSMUX_ROLE_BSC_NAT,
@@ -364,6 +402,7 @@ int osmux_read_from_bsc_cb(struct osmo_fd *ofd, unsigned int what)
 	struct sockaddr_in addr;
 	struct mgcp_config *cfg = ofd->data;
 	uint32_t rem;
+	struct mgcp_conn_rtp *conn_net = NULL;
 
 	msg = osmux_recv(ofd, &addr);
 	if (!msg)
@@ -380,17 +419,22 @@ int osmux_read_from_bsc_cb(struct osmo_fd *ofd, unsigned int what)
 		/* Yes, we use MGCP_DEST_BTS to locate the origin */
 		endp = endpoint_lookup(cfg, osmuxh->circuit_id,
 				       &addr.sin_addr, MGCP_DEST_BTS);
+
+		conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+		if (!conn_net)
+			goto out;
+
 		if (!endp) {
 			LOGP(DLMGCP, LOGL_ERROR,
 			     "Cannot find an endpoint for circuit_id=%d\n",
 			     osmuxh->circuit_id);
 			goto out;
 		}
-		endp->osmux.stats.octets += osmux_chunk_length(msg, rem);
-		endp->osmux.stats.chunks++;
+		conn_net->osmux.stats.octets += osmux_chunk_length(msg, rem);
+		conn_net->osmux.stats.chunks++;
 		rem = msg->len;
 
-		osmux_xfrm_output(osmuxh, &endp->osmux.out, &list);
+		osmux_xfrm_output(osmuxh, &conn_net->osmux.out, &list);
 		osmux_tx_sched(&list, scheduled_tx_net_cb, endp);
 	}
 out:
@@ -438,7 +482,7 @@ int osmux_enable_endpoint(struct mgcp_endpoint *endp, int role,
 {
 	/* If osmux is enabled, initialize the output handler. This handler is
 	 * used to reconstruct the RTP flow from osmux. The RTP SSRC is
-	 * allocated based on the circuit ID (endp->osmux.cid), which is unique
+	 * allocated based on the circuit ID (conn_net->osmux.cid), which is unique
 	 * in the local scope to the BSC/BSC-NAT. We use it to divide the RTP
 	 * SSRC space (2^32) by the 256 possible circuit IDs, then randomly
 	 * select one value from that window. Thus, we have no chance to have
@@ -446,26 +490,31 @@ int osmux_enable_endpoint(struct mgcp_endpoint *endp, int role,
 	 * similarly, for flows traveling to the MSC.
 	 */
 	static const uint32_t rtp_ssrc_winlen = UINT32_MAX / 256;
+	struct mgcp_conn_rtp *conn_net = NULL;
 
-	if (endp->osmux.state == OSMUX_STATE_DISABLED) {
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_net)
+		return -1;
+
+	if (conn_net->osmux.state == OSMUX_STATE_DISABLED) {
 		LOGP(DLMGCP, LOGL_ERROR, "Endpoint %u didn't request Osmux\n",
 		     ENDPOINT_NUMBER(endp));
 		return -1;
 	}
 
-	osmux_xfrm_output_init(&endp->osmux.out,
-			       (endp->osmux.cid * rtp_ssrc_winlen) +
+	osmux_xfrm_output_init(&conn_net->osmux.out,
+			       (conn_net->osmux.cid * rtp_ssrc_winlen) +
 			       (random() % rtp_ssrc_winlen));
 
-	endp->osmux.in = osmux_handle_lookup(endp->cfg, addr, port);
-	if (!endp->osmux.in) {
+	conn_net->osmux.in = osmux_handle_lookup(endp->cfg, addr, port);
+	if (!conn_net->osmux.in) {
 		LOGP(DLMGCP, LOGL_ERROR, "Cannot allocate input osmux handle\n");
 		return -1;
 	}
-	if (!osmux_xfrm_input_open_circuit(endp->osmux.in, endp->osmux.cid,
+	if (!osmux_xfrm_input_open_circuit(conn_net->osmux.in, conn_net->osmux.cid,
 					   endp->cfg->osmux_dummy)) {
 		LOGP(DLMGCP, LOGL_ERROR, "Cannot open osmux circuit %u\n",
-		     endp->osmux.cid);
+		     conn_net->osmux.cid);
 		return -1;
 	}
 
@@ -477,32 +526,51 @@ int osmux_enable_endpoint(struct mgcp_endpoint *endp, int role,
 			endp->type = MGCP_OSMUX_BSC;
 			break;
 	}
-	endp->osmux.state = OSMUX_STATE_ENABLED;
+
+	conn_net->osmux.state = OSMUX_STATE_ENABLED;
 
 	return 0;
 }
 
 void osmux_disable_endpoint(struct mgcp_endpoint *endp)
 {
+	struct mgcp_conn_rtp *conn_net = NULL;
+
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_net)
+		return;
+
 	LOGP(DLMGCP, LOGL_INFO, "Releasing endpoint %u using Osmux CID %u\n",
-	     ENDPOINT_NUMBER(endp), endp->osmux.cid);
-	osmux_xfrm_input_close_circuit(endp->osmux.in, endp->osmux.cid);
-	endp->osmux.state = OSMUX_STATE_DISABLED;
-	endp->osmux.cid = -1;
-	osmux_handle_put(endp->osmux.in);
+	     ENDPOINT_NUMBER(endp), conn_net->osmux.cid);
+	osmux_xfrm_input_close_circuit(conn_net->osmux.in, conn_net->osmux.cid);
+	conn_net->osmux.state = OSMUX_STATE_DISABLED;
+	conn_net->osmux.cid = -1;
+	osmux_handle_put(conn_net->osmux.in);
 }
 
 void osmux_release_cid(struct mgcp_endpoint *endp)
 {
-	if (endp->osmux.allocated_cid >= 0)
-		osmux_put_cid(endp->osmux.allocated_cid);
-	endp->osmux.allocated_cid = -1;
+	struct mgcp_conn_rtp *conn_net = NULL;
+
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_net)
+		return;
+
+	if (conn_net->osmux.allocated_cid >= 0)
+		osmux_put_cid(conn_net->osmux.allocated_cid);
+	conn_net->osmux.allocated_cid = -1;
 }
 
 void osmux_allocate_cid(struct mgcp_endpoint *endp)
 {
+	struct mgcp_conn_rtp *conn_net = NULL;
+
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_net)
+		return;
+
 	osmux_release_cid(endp);
-	endp->osmux.allocated_cid = osmux_get_cid();
+	conn_net->osmux.allocated_cid = osmux_get_cid();
 }
 
 /* We don't need to send the dummy load for osmux so often as another endpoint
@@ -513,17 +581,22 @@ int osmux_send_dummy(struct mgcp_endpoint *endp)
 {
 	char buf[1 + sizeof(uint8_t)];
 	struct in_addr addr_unset = {};
+	struct mgcp_conn_rtp *conn_net = NULL;
+
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	if (!conn_net)
+		return -1;
 
 	buf[0] = MGCP_DUMMY_LOAD;
-	memcpy(&buf[1], &endp->osmux.cid, sizeof(endp->osmux.cid));
+	memcpy(&buf[1], &conn_net->osmux.cid, sizeof(conn_net->osmux.cid));
 
 	/* Wait until we have the connection information from MDCX */
-	if (memcmp(&endp->net_end.addr, &addr_unset, sizeof(addr_unset)) == 0)
+	if (memcmp(&conn_net->end.addr, &addr_unset, sizeof(addr_unset)) == 0)
 		return 0;
 
-	if (endp->osmux.state == OSMUX_STATE_ACTIVATING) {
+	if (conn_net->osmux.state == OSMUX_STATE_ACTIVATING) {
 		if (osmux_enable_endpoint(endp, OSMUX_ROLE_BSC,
-					  &endp->net_end.addr,
+					  &conn_net->end.addr,
 					  htons(endp->cfg->osmux_port)) < 0) {
 			LOGP(DLMGCP, LOGL_ERROR,
 			     "Could not activate osmux in endpoint %d\n",
@@ -531,14 +604,14 @@ int osmux_send_dummy(struct mgcp_endpoint *endp)
 		}
 		LOGP(DLMGCP, LOGL_ERROR,
 		     "Osmux CID %u for %s:%u is now enabled\n",
-		     endp->osmux.cid, inet_ntoa(endp->net_end.addr),
+		     conn_net->osmux.cid, inet_ntoa(conn_net->end.addr),
 		     endp->cfg->osmux_port);
 	}
 	LOGP(DLMGCP, LOGL_DEBUG,
 	     "sending OSMUX dummy load to %s CID %u\n",
-	     inet_ntoa(endp->net_end.addr), endp->osmux.cid);
+	     inet_ntoa(conn_net->end.addr), conn_net->osmux.cid);
 
-	return mgcp_udp_send(osmux_fd.fd, &endp->net_end.addr,
+	return mgcp_udp_send(osmux_fd.fd, &conn_net->end.addr,
 			     htons(endp->cfg->osmux_port), buf, sizeof(buf));
 }
 
