@@ -19,9 +19,10 @@
 #undef _GNU_SOURCE
 #define _GNU_SOURCE
 
-#include <osmocom/legacy_mgcp/mgcp.h>
-#include <osmocom/legacy_mgcp/vty.h>
-#include <osmocom/legacy_mgcp/mgcp_internal.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/vty.h>
+#include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/mgcp/mgcp_stat.h>
 
 #include <osmocom/core/application.h>
 #include <osmocom/core/talloc.h>
@@ -269,7 +270,7 @@ static void test_strline(void)
 
 #define DLCX_RET "250 7 OK\r\n"			\
 		 "P: PS=0, OS=0, PR=0, OR=0, PL=0, JI=0\r\n" \
-		 "X-Osmo-CP: EC TIS=0, TOS=0, TIR=0, TOR=0\r\n"
+		 "X-Osmo-CP: EC TI=0, TO=0\r\n"
 
 #define RQNT	 "RQNT 186908780 1@mgw MGCP 1.0\r\n"	\
 		 "X: B244F267488\r\n"			\
@@ -502,6 +503,8 @@ static void test_messages(void)
 	struct mgcp_config *cfg;
 	struct mgcp_endpoint *endp;
 	int i;
+	struct mgcp_conn_rtp *conn_net = NULL;
+	struct mgcp_conn_rtp *conn_bts = NULL;
 
 	cfg = mgcp_config_alloc();
 
@@ -515,8 +518,12 @@ static void test_messages(void)
 	/* reset endpoints */
 	for (i = 0; i < cfg->trunk.number_endpoints; i++) {
 		endp = &cfg->trunk.endpoints[i];
-		endp->net_end.codec.payload_type = PTYPE_NONE;
-		endp->net_end.packet_duration_ms = -1;
+		conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+		conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+		OSMO_ASSERT(conn_bts && conn_net);
+
+		conn_net->end.codec.payload_type = PTYPE_NONE;
+		conn_net->end.packet_duration_ms = -1;
 
 		OSMO_ASSERT(endp->conn_mode == MGCP_CONN_NONE);
 		endp->conn_mode |= CONN_UNMODIFIED;
@@ -550,9 +557,13 @@ static void test_messages(void)
 		if (last_endpoint != -1) {
 			endp = &cfg->trunk.endpoints[last_endpoint];
 
-			if (endp->net_end.packet_duration_ms != -1)
+			conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+			conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+			OSMO_ASSERT(conn_bts && conn_net);
+
+			if (conn_net->end.packet_duration_ms != -1)
 				printf("Detected packet duration: %d\n",
-				       endp->net_end.packet_duration_ms);
+				       conn_net->end.packet_duration_ms);
 			else
 				printf("Packet duration not set\n");
 			if (endp->local_options.pkt_period_min ||
@@ -577,17 +588,17 @@ static void test_messages(void)
 				       " LOOP" : "");
 				fprintf(stderr,
 					"BTS output %sabled, NET output %sabled\n",
-					endp->bts_end.output_enabled ? "en" : "dis",
-					endp->net_end.output_enabled ? "en" : "dis");
+					conn_bts->end.output_enabled ? "en" : "dis",
+					conn_net->end.output_enabled ? "en" : "dis");
 			} else
 				printf("Connection mode not set\n");
 
-			OSMO_ASSERT(endp->net_end.output_enabled ==
+			OSMO_ASSERT(conn_net->end.output_enabled ==
 				    (endp->conn_mode & MGCP_CONN_SEND_ONLY ? 1 : 0));
-			OSMO_ASSERT(endp->bts_end.output_enabled ==
+			OSMO_ASSERT(conn_bts->end.output_enabled ==
 				    (endp->conn_mode & MGCP_CONN_RECV_ONLY ? 1 : 0));
 
-			endp->net_end.packet_duration_ms = -1;
+			conn_net->end.packet_duration_ms = -1;
 			endp->local_options.pkt_period_min = 0;
 			endp->local_options.pkt_period_max = 0;
 			endp->conn_mode |= CONN_UNMODIFIED;
@@ -603,18 +614,18 @@ static void test_messages(void)
 			fprintf(stderr, "endpoint %d: "
 				"payload type BTS %d (exp %d), NET %d (exp %d)\n",
 				last_endpoint,
-				endp->bts_end.codec.payload_type, t->exp_bts_ptype,
-				endp->net_end.codec.payload_type, t->exp_net_ptype);
+				conn_bts->end.codec.payload_type, t->exp_bts_ptype,
+				conn_net->end.codec.payload_type, t->exp_net_ptype);
 
 			if (t->exp_bts_ptype != PTYPE_IGNORE)
-				OSMO_ASSERT(endp->bts_end.codec.payload_type ==
+				OSMO_ASSERT(conn_bts->end.codec.payload_type ==
 					    t->exp_bts_ptype);
 			if (t->exp_net_ptype != PTYPE_IGNORE)
-				OSMO_ASSERT(endp->net_end.codec.payload_type ==
+				OSMO_ASSERT(conn_net->end.codec.payload_type ==
 					    t->exp_net_ptype);
 
 			/* Reset them again for next test */
-			endp->net_end.codec.payload_type = PTYPE_NONE;
+			conn_net->end.codec.payload_type = PTYPE_NONE;
 		}
 	}
 
@@ -625,6 +636,7 @@ static void test_retransmission(void)
 {
 	struct mgcp_config *cfg;
 	int i;
+	struct mgcp_conn_rtp *conn_bts = NULL;
 
 	cfg = mgcp_config_alloc();
 
@@ -637,7 +649,9 @@ static void test_retransmission(void)
 	for (i = 0; i < cfg->trunk.number_endpoints; i++) {
 		struct mgcp_endpoint *endp;
 		endp = &cfg->trunk.endpoints[i];
-		endp->bts_end.packet_duration_ms = 20;
+		conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+		OSMO_ASSERT(conn_bts);
+		conn_bts->end.packet_duration_ms = 20;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(retransmit); i++) {
@@ -754,8 +768,8 @@ static void test_packet_loss_calc(void)
 		state.stats_max_seq = pl_test_dat[i].max_seq;
 		state.stats_cycles = pl_test_dat[i].cycles;
 
-		rtp.packets = pl_test_dat[i].packets;
-		mgcp_state_calc_loss(&state, &rtp, &expected, &loss);
+		rtp.packets_rx = pl_test_dat[i].packets;
+		calc_loss(&state, &rtp, &expected, &loss);
 
 		if (loss != pl_test_dat[i].loss || expected != pl_test_dat[i].expected) {
 			printf("FAIL: Wrong exp/loss at idx(%d) Loss(%d vs. %d) Exp(%u vs. %u)\n",
@@ -763,6 +777,34 @@ static void test_packet_loss_calc(void)
 				expected, pl_test_dat[i].expected);
 		}
 	}
+}
+
+int mgcp_parse_stats(struct msgb *msg, uint32_t *ps, uint32_t *os,
+		uint32_t *pr, uint32_t *_or, int *loss, uint32_t *jitter)
+{
+	char *line, *save;
+	int rc;
+
+	/* initialize with bad values */
+	*ps = *os = *pr = *_or = *jitter = UINT_MAX;
+	*loss = INT_MAX;
+
+
+	line = strtok_r((char *) msg->l2h, "\r\n", &save);
+	if (!line)
+		return -1;
+
+	/* this can only parse the message that is created above... */
+	for_each_non_empty_line(line, save) {
+		switch (line[0]) {
+		case 'P':
+			rc = sscanf(line, "P: PS=%u, OS=%u, PR=%u, OR=%u, PL=%d, JI=%u",
+					ps, os, pr, _or, loss, jitter);
+			return rc == 6 ? 0 : -1;
+		}
+	}
+
+	return -1;
 }
 
 static void test_mgcp_stats(void)
@@ -909,7 +951,7 @@ static void test_packet_error_detection(int patch_ssrc, int patch_ts)
 	struct mgcp_trunk_config trunk;
 	struct mgcp_endpoint endp;
 	struct mgcp_rtp_state state;
-	struct mgcp_rtp_end *rtp = &endp.net_end;
+	struct mgcp_rtp_end *rtp;
 	struct sockaddr_in addr = {0};
 	char buffer[4096];
 	uint32_t last_ssrc = 0;
@@ -917,6 +959,7 @@ static void test_packet_error_detection(int patch_ssrc, int patch_ts)
 	uint32_t last_seqno = 0;
 	int last_in_ts_err_cnt = 0;
 	int last_out_ts_err_cnt = 0;
+	struct mgcp_conn_rtp *conn_net = NULL;
 
 	printf("Testing packet error detection%s%s.\n",
 	       patch_ssrc ? ", patch SSRC" : "",
@@ -933,7 +976,12 @@ static void test_packet_error_detection(int patch_ssrc, int patch_ts)
 
 	endp.tcfg = &trunk;
 
-	mgcp_initialize_endp(&endp);
+	INIT_LLIST_HEAD(&endp.conns);
+	mgcp_conn_alloc(NULL, &endp.conns, CONN_ID_BTS, MGCP_CONN_TYPE_RTP, "BTS");
+	mgcp_conn_alloc(NULL, &endp.conns, CONN_ID_NET, MGCP_CONN_TYPE_RTP, "NET");
+	mgcp_release_endp(&endp);
+	conn_net = mgcp_conn_get_rtp(&endp.conns, CONN_ID_NET);
+	rtp = &conn_net->end;
 
 	rtp->codec.payload_type = 98;
 
@@ -945,7 +993,6 @@ static void test_packet_error_detection(int patch_ssrc, int patch_ts)
 		OSMO_ASSERT(info->len <= sizeof(buffer));
 		OSMO_ASSERT(info->len >= 0);
 		memmove(buffer, info->data, info->len);
-
 		mgcp_rtp_end_config(&endp, 1, rtp);
 
 		mgcp_patch_and_count(&endp, &state, rtp, &addr,
@@ -971,7 +1018,7 @@ static void test_packet_error_detection(int patch_ssrc, int patch_ts)
 		       state.out_stream.err_ts_counter - last_out_ts_err_cnt);
 
 		printf("Stats: Jitter = %u, Transit = %d\n",
-		       mgcp_state_calc_jitter(&state), state.stats_transit);
+		       calc_jitter(&state), state.stats_transit);
 
 		last_in_ts_err_cnt = state.in_stream.err_ts_counter;
 		last_out_ts_err_cnt = state.out_stream.err_ts_counter;
@@ -988,6 +1035,7 @@ static void test_multilple_codec(void)
 	struct mgcp_endpoint *endp;
 	struct msgb *inp, *resp;
 	struct in_addr addr;
+	struct mgcp_conn_rtp *conn_net = NULL;
 
 	printf("Testing multiple payload types\n");
 
@@ -1006,8 +1054,10 @@ static void test_multilple_codec(void)
 
 	OSMO_ASSERT(last_endpoint == 1);
 	endp = &cfg->trunk.endpoints[last_endpoint];
-	OSMO_ASSERT(endp->net_end.codec.payload_type == 18);
-	OSMO_ASSERT(endp->net_end.alt_codec.payload_type == 97);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	OSMO_ASSERT(conn_net);
+	OSMO_ASSERT(conn_net->end.codec.payload_type == 18);
+	OSMO_ASSERT(conn_net->end.alt_codec.payload_type == 97);
 
 	/* Allocate 2@mgw with three codecs, last one ignored */
 	last_endpoint = -1;
@@ -1018,8 +1068,10 @@ static void test_multilple_codec(void)
 
 	OSMO_ASSERT(last_endpoint == 2);
 	endp = &cfg->trunk.endpoints[last_endpoint];
-	OSMO_ASSERT(endp->net_end.codec.payload_type == 18);
-	OSMO_ASSERT(endp->net_end.alt_codec.payload_type == 97);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	OSMO_ASSERT(conn_net);
+	OSMO_ASSERT(conn_net->end.codec.payload_type == 18);
+	OSMO_ASSERT(conn_net->end.alt_codec.payload_type == 97);
 
 	/* Allocate 3@mgw with no codecs, check for PT == -1 */
 	last_endpoint = -1;
@@ -1030,8 +1082,10 @@ static void test_multilple_codec(void)
 
 	OSMO_ASSERT(last_endpoint == 3);
 	endp = &cfg->trunk.endpoints[last_endpoint];
-	OSMO_ASSERT(endp->net_end.codec.payload_type == -1);
-	OSMO_ASSERT(endp->net_end.alt_codec.payload_type == -1);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	OSMO_ASSERT(conn_net);
+	OSMO_ASSERT(conn_net->end.codec.payload_type == -1);
+	OSMO_ASSERT(conn_net->end.alt_codec.payload_type == -1);
 
 	/* Allocate 4@mgw with a single codec */
 	last_endpoint = -1;
@@ -1042,8 +1096,10 @@ static void test_multilple_codec(void)
 
 	OSMO_ASSERT(last_endpoint == 4);
 	endp = &cfg->trunk.endpoints[last_endpoint];
-	OSMO_ASSERT(endp->net_end.codec.payload_type == 18);
-	OSMO_ASSERT(endp->net_end.alt_codec.payload_type == -1);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	OSMO_ASSERT(conn_net);
+	OSMO_ASSERT(conn_net->end.codec.payload_type == 18);
+	OSMO_ASSERT(conn_net->end.alt_codec.payload_type == -1);
 
 	/* Allocate 5@mgw at select GSM.. */
 	last_endpoint = -1;
@@ -1057,8 +1113,10 @@ static void test_multilple_codec(void)
 
 	OSMO_ASSERT(last_endpoint == 5);
 	endp = &cfg->trunk.endpoints[last_endpoint];
-	OSMO_ASSERT(endp->net_end.codec.payload_type == 3);
-	OSMO_ASSERT(endp->net_end.alt_codec.payload_type == -1);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	OSMO_ASSERT(conn_net);
+	OSMO_ASSERT(conn_net->end.codec.payload_type == 3);
+	OSMO_ASSERT(conn_net->end.alt_codec.payload_type == -1);
 
 	inp = create_msg(MDCX_NAT_DUMMY);
 	last_endpoint = -1;
@@ -1067,12 +1125,14 @@ static void test_multilple_codec(void)
 	msgb_free(resp);
 	OSMO_ASSERT(last_endpoint == 5);
 	endp = &cfg->trunk.endpoints[last_endpoint];
-	OSMO_ASSERT(endp->net_end.codec.payload_type == 3);
-	OSMO_ASSERT(endp->net_end.alt_codec.payload_type == -1);
-	OSMO_ASSERT(endp->net_end.rtp_port == htons(16434));
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	OSMO_ASSERT(conn_net);
+	OSMO_ASSERT(conn_net->end.codec.payload_type == 3);
+	OSMO_ASSERT(conn_net->end.alt_codec.payload_type == -1);
+	OSMO_ASSERT(conn_net->end.rtp_port == htons(16434));
 	memset(&addr, 0, sizeof(addr));
 	inet_aton("8.8.8.8", &addr);
-	OSMO_ASSERT(endp->net_end.addr.s_addr == addr.s_addr);
+	OSMO_ASSERT(conn_net->end.addr.s_addr == addr.s_addr);
 
 	/* Check what happens without that flag */
 
@@ -1081,6 +1141,8 @@ static void test_multilple_codec(void)
 	talloc_free(endp->last_response);
 	talloc_free(endp->last_trans);
 	endp->last_response = endp->last_trans = NULL;
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	OSMO_ASSERT(conn_net);
 
 	last_endpoint = -1;
 	inp = create_msg(CRCX_MULT_GSM_EXACT);
@@ -1091,8 +1153,10 @@ static void test_multilple_codec(void)
 
 	OSMO_ASSERT(last_endpoint == 5);
 	endp = &cfg->trunk.endpoints[last_endpoint];
-	OSMO_ASSERT(endp->net_end.codec.payload_type == 255);
-	OSMO_ASSERT(endp->net_end.alt_codec.payload_type == 0);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	OSMO_ASSERT(conn_net);
+	OSMO_ASSERT(conn_net->end.codec.payload_type == 255);
+	OSMO_ASSERT(conn_net->end.alt_codec.payload_type == 0);
 
 	talloc_free(cfg);
 }
@@ -1101,6 +1165,7 @@ static void test_no_cycle(void)
 {
 	struct mgcp_config *cfg;
 	struct mgcp_endpoint *endp;
+	struct mgcp_conn_rtp *conn_net = NULL;
 
 	printf("Testing no sequence flow on initial packet\n");
 
@@ -1109,29 +1174,32 @@ static void test_no_cycle(void)
 	mgcp_endpoints_allocate(&cfg->trunk);
 
 	endp = &cfg->trunk.endpoints[1];
-	OSMO_ASSERT(endp->net_state.stats_initialized == 0);
+	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+	OSMO_ASSERT(conn_net);
 
-	mgcp_rtp_annex_count(endp, &endp->net_state, 0, 0, 2342);
-	OSMO_ASSERT(endp->net_state.stats_initialized == 1);
-	OSMO_ASSERT(endp->net_state.stats_cycles == 0);
-	OSMO_ASSERT(endp->net_state.stats_max_seq == 0);
+	OSMO_ASSERT(conn_net->state.stats_initialized == 0);
 
-	mgcp_rtp_annex_count(endp, &endp->net_state, 1, 0, 2342);
-	OSMO_ASSERT(endp->net_state.stats_initialized == 1);
-	OSMO_ASSERT(endp->net_state.stats_cycles == 0);
-	OSMO_ASSERT(endp->net_state.stats_max_seq == 1);
+	mgcp_rtp_annex_count(endp, &conn_net->state, 0, 0, 2342);
+	OSMO_ASSERT(conn_net->state.stats_initialized == 1);
+	OSMO_ASSERT(conn_net->state.stats_cycles == 0);
+	OSMO_ASSERT(conn_net->state.stats_max_seq == 0);
+
+	mgcp_rtp_annex_count(endp, &conn_net->state, 1, 0, 2342);
+	OSMO_ASSERT(conn_net->state.stats_initialized == 1);
+	OSMO_ASSERT(conn_net->state.stats_cycles == 0);
+	OSMO_ASSERT(conn_net->state.stats_max_seq == 1);
 
 	/* now jump.. */
-	mgcp_rtp_annex_count(endp, &endp->net_state, UINT16_MAX, 0, 2342);
-	OSMO_ASSERT(endp->net_state.stats_initialized == 1);
-	OSMO_ASSERT(endp->net_state.stats_cycles == 0);
-	OSMO_ASSERT(endp->net_state.stats_max_seq == UINT16_MAX);
+	mgcp_rtp_annex_count(endp, &conn_net->state, UINT16_MAX, 0, 2342);
+	OSMO_ASSERT(conn_net->state.stats_initialized == 1);
+	OSMO_ASSERT(conn_net->state.stats_cycles == 0);
+	OSMO_ASSERT(conn_net->state.stats_max_seq == UINT16_MAX);
 
 	/* and wrap */
-	mgcp_rtp_annex_count(endp, &endp->net_state, 0, 0, 2342);
-	OSMO_ASSERT(endp->net_state.stats_initialized == 1);
-	OSMO_ASSERT(endp->net_state.stats_cycles == UINT16_MAX + 1);
-	OSMO_ASSERT(endp->net_state.stats_max_seq == 0);
+	mgcp_rtp_annex_count(endp, &conn_net->state, 0, 0, 2342);
+	OSMO_ASSERT(conn_net->state.stats_initialized == 1);
+	OSMO_ASSERT(conn_net->state.stats_cycles == UINT16_MAX + 1);
+	OSMO_ASSERT(conn_net->state.stats_max_seq == 0);
 
 	talloc_free(cfg);
 }
@@ -1142,6 +1210,7 @@ static void test_no_name(void)
 	struct mgcp_endpoint *endp;
 	struct msgb *inp, *msg;
 	int i;
+	struct mgcp_conn_rtp *conn_net = NULL;
 
 	printf("Testing no rtpmap name\n");
 	cfg = mgcp_config_alloc();
@@ -1157,8 +1226,10 @@ static void test_no_name(void)
 	/* reset endpoints */
 	for (i = 0; i < cfg->trunk.number_endpoints; i++) {
 		endp = &cfg->trunk.endpoints[i];
-		endp->net_end.codec.payload_type = PTYPE_NONE;
-		endp->net_end.packet_duration_ms = -1;
+		conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+		OSMO_ASSERT(conn_net);
+		conn_net->end.codec.payload_type = PTYPE_NONE;
+		conn_net->end.packet_duration_ms = -1;
 
 		OSMO_ASSERT(endp->conn_mode == MGCP_CONN_NONE);
 		endp->conn_mode |= CONN_UNMODIFIED;
