@@ -24,9 +24,9 @@
 
 #include "g711common.h"
 
-#include <osmocom/legacy_mgcp/mgcp.h>
-#include <osmocom/legacy_mgcp/mgcp_internal.h>
-#include <osmocom/legacy_mgcp/mgcp_transcode.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/mgcp/mgcp_transcode.h>
 
 #include <osmocom/core/talloc.h>
 #include <osmocom/netif/rtp.h>
