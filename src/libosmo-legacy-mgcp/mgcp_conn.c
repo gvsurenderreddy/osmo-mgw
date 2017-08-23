@@ -153,13 +153,14 @@ char *mgcp_conn_dump(struct mgcp_conn *conn)
 	switch (conn->type) {
 	case MGCP_CONN_TYPE_RTP:
 		/* Dump RTP connection */
-		snprintf(str, sizeof(str), "(name: %s, type:rtp, id:%u, ip:%s,"
-			 "ports:%u/%u, packets:%u)",
+		snprintf(str, sizeof(str), "(name: %s, type:rtp, id:%u, addr:%s, "
+			 "rtp_port:%u rtcp_port:%u, packets:%u)",
 			 conn->name,
 			 conn->id,
 			 inet_ntoa(conn->u.rtp.end.addr),
-			 conn->u.rtp.end.rtp_port,
-			 conn->u.rtp.end.rtcp_port, conn->u.rtp.end.packets);
+			 ntohs(conn->u.rtp.end.rtp_port),
+			 ntohs(conn->u.rtp.end.rtcp_port),
+			 conn->u.rtp.end.packets);
 		break;
 
 	default:
