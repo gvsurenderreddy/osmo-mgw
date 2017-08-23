@@ -90,7 +90,13 @@ struct mgcp_conn_rtp *mgcp_conn_get_rtp(struct llist_head *conns, uint32_t id)
 
 	if (conn->type == MGCP_CONN_TYPE_RTP)
 		return &conn->u.rtp;
+
+	/* FIXME: This exit() will end the program when
+	 * should we ever try to access a non existant
+	 * connection. Remove this exit() when we are
+	 * confident about the connection handling */
 	exit(1);
+
 	return NULL;
 }
 
