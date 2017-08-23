@@ -48,6 +48,7 @@ struct mgcp_conn *mgcp_conn_alloc(void *ctx, struct llist_head *conns,
 		return NULL;
 	conn->type = type;
 	conn->id = id;
+	conn->u.rtp.conn = conn;
 	strcpy(conn->name, name);
 	llist_add(&conn->entry, conns);
 
