@@ -948,8 +948,8 @@ static void test_packet_error_detection(int patch_ssrc, int patch_ts)
 	endp.tcfg = &trunk;
 
 	INIT_LLIST_HEAD(&endp.conns);
-	mgcp_conn_alloc(NULL, &endp.conns, CONN_ID_BTS, MGCP_CONN_TYPE_RTP);
-	mgcp_conn_alloc(NULL, &endp.conns, CONN_ID_NET, MGCP_CONN_TYPE_RTP);
+	mgcp_conn_alloc(NULL, &endp.conns, CONN_ID_BTS, MGCP_CONN_TYPE_RTP, "BTS");
+	mgcp_conn_alloc(NULL, &endp.conns, CONN_ID_NET, MGCP_CONN_TYPE_RTP, "NET");
 	mgcp_initialize_endp(&endp);
 	conn_net = mgcp_conn_get_rtp(&endp.conns, CONN_ID_NET);
 	rtp = &conn_net->end;

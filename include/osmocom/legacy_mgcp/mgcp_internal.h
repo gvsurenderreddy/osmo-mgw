@@ -195,6 +195,9 @@ struct mgcp_conn {
 	/*!< connection id to identify the conntion */
 	uint32_t id;
 
+	/*!< human readable name (vty, logging) */
+	char name[256];
+
 	/*!< union with connection description */
 	union {
 		struct mgcp_conn_rtp rtp;
