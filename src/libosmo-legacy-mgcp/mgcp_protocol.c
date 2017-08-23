@@ -609,11 +609,17 @@ static int parse_conn_mode(const char *msg, struct mgcp_endpoint *endp)
 	return ret;
 }
 
-static int allocate_port(struct mgcp_endpoint *endp, struct mgcp_rtp_end *end,
+static int allocate_port(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn,
 			 struct mgcp_port_range *range,
-			 int (*alloc)(struct mgcp_endpoint *endp, int port))
+			 int (*alloc)(struct mgcp_endpoint *endp, int port,
+				      struct mgcp_conn_rtp *conn))
 {
 	int i;
+	struct mgcp_rtp_end *end;
+
+	OSMO_ASSERT(conn);
+	end = &conn->end;
+	OSMO_ASSERT(end);
 
 	if (range->mode == PORT_ALLOC_STATIC) {
 		end->local_alloc = PORT_ALLOC_STATIC;
@@ -627,7 +633,7 @@ static int allocate_port(struct mgcp_endpoint *endp, struct mgcp_rtp_end *end,
 		if (range->last_port >= range->range_end)
 			range->last_port = range->range_start;
 
-		rc = alloc(endp, range->last_port);
+		rc = alloc(endp, range->last_port, conn);
 
 		range->last_port += 2;
 		if (rc == 0) {
@@ -652,11 +658,11 @@ static int allocate_ports(struct mgcp_endpoint *endp)
 	if (!conn_bts || !conn_net)
 		return -1;
 
-	if (allocate_port(endp, &conn_net->end, &endp->cfg->net_ports,
+	if (allocate_port(endp, conn_net, &endp->cfg->net_ports,
 			  mgcp_bind_net_rtp_port) != 0)
 		return -1;
 
-	if (allocate_port(endp, &conn_bts->end, &endp->cfg->bts_ports,
+	if (allocate_port(endp, conn_bts, &endp->cfg->bts_ports,
 			  mgcp_bind_bts_rtp_port) != 0) {
 		mgcp_rtp_end_reset(&conn_net->end);
 		return -1;
