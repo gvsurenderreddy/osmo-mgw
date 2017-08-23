@@ -566,73 +566,51 @@ static int forward_data(int fd, struct mgcp_rtp_tap *tap, const char *buf, int l
 		      (struct sockaddr *)&tap->forward, sizeof(tap->forward));
 }
 
-int mgcp_send(struct mgcp_endpoint *endp, int dest, int is_rtp,
-	      struct sockaddr_in *addr, char *buf, int rc)
+int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
+	      char *buf, int rc, uint32_t conn_src_id, uint32_t conn_dst_id)
 {
 	struct mgcp_trunk_config *tcfg = endp->tcfg;
 	struct mgcp_rtp_end *rtp_end;
 	struct mgcp_rtp_state *rtp_state;
 	int tap_idx;
-	struct mgcp_conn_rtp *conn_net = NULL;
-	struct mgcp_conn_rtp *conn_bts = NULL;
+	struct mgcp_conn_rtp *conn_src;
+	struct mgcp_conn_rtp *conn_dst;
+	char *dest_name;
 
-	LOGP(DLMGCP, LOGL_DEBUG,
-	     "endpoint %x dest %s tcfg->audio_loop %d endp->conn_mode %d (== loopback: %d)\n",
-	     ENDPOINT_NUMBER(endp),
-	     dest == MGCP_DEST_NET? "net" : "bts",
-	     tcfg->audio_loop,
-	     endp->conn_mode,
-	     endp->conn_mode == MGCP_CONN_LOOPBACK);
-
-	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_bts || !conn_net)
+	conn_src = mgcp_conn_get_rtp(&endp->conns, conn_src_id);
+	conn_dst = mgcp_conn_get_rtp(&endp->conns, conn_dst_id);
+	if (!conn_src || !conn_dst)
 		return -1;
 
-	/* For loop toggle the destination and then dispatch. */
-	if (tcfg->audio_loop)
-		dest = !dest;
-
-	/* Loop based on the conn_mode, maybe undoing the above */
-	if (endp->conn_mode == MGCP_CONN_LOOPBACK)
-		dest = !dest;
-
-	if (dest == MGCP_DEST_NET) {
-		rtp_end = &conn_net->end;
-		rtp_state = &conn_bts->state;
-		tap_idx = MGCP_TAP_NET_OUT;
-	} else {
-		rtp_end = &conn_bts->end;
-		rtp_state = &conn_net->state;
-		tap_idx = MGCP_TAP_BTS_OUT;
-	}
+	LOGP(DLMGCP, LOGL_DEBUG, "endpoint %x: src_conn:%s\n",
+	     ENDPOINT_NUMBER(endp), mgcp_conn_dump(conn_src->conn));
+	LOGP(DLMGCP, LOGL_DEBUG, "endpoint %x: dst_conn:%s\n",
+	     ENDPOINT_NUMBER(endp), mgcp_conn_dump(conn_dst->conn));
 	LOGP(DLMGCP, LOGL_DEBUG,
-	     "endpoint %x dest %s conn[1].u.rtp.end %s %d %d conn[0].u.rtp.end %s %d %d rtp_end %s %d %d\n",
-	     ENDPOINT_NUMBER(endp),
-	     dest == MGCP_DEST_NET? "net" : "bts",
+	     "endpoint %x: loop:%d, mode:%d (== loopback: %d)\n",
+	     ENDPOINT_NUMBER(endp), tcfg->audio_loop, endp->conn_mode,
+	     endp->conn_mode == MGCP_CONN_LOOPBACK);
 
-	     inet_ntoa(conn_net->end.addr),
-	     ntohs(conn_net->end.rtp_port),
-	     ntohs(conn_net->end.rtcp_port),
-
-	     inet_ntoa(conn_bts->end.addr),
-	     ntohs(conn_bts->end.rtp_port),
-	     ntohs(conn_bts->end.rtcp_port),
-
-	     inet_ntoa(rtp_end->addr),
-	     ntohs(rtp_end->rtp_port),
-	     ntohs(rtp_end->rtcp_port)
-	    );
+	if (endp->conn_mode != MGCP_CONN_LOOPBACK) {
+		rtp_end = &conn_dst->end;
+		rtp_state = &conn_src->state;
+		tap_idx = MGCP_TAP_NET_OUT;
+		dest_name = conn_dst->conn->name;
+	} else {
+		rtp_end = &conn_src->end;
+		rtp_state = &conn_dst->state;
+		tap_idx = MGCP_TAP_BTS_OUT;
+		dest_name = conn_src->conn->name;
+	}
 
 	if (!rtp_end->output_enabled) {
 		rtp_end->dropped_packets += 1;
 		LOGP(DLMGCP, LOGL_DEBUG,
-		     "endpoint %x output disabled, drop to %s %s %d %d\n",
+		     "endpoint %x: output disabled, drop to %s %s rtp_port:%u rtcp_port:%u\n",
 		     ENDPOINT_NUMBER(endp),
-		     dest == MGCP_DEST_NET? "net" : "bts",
+		     dest_name,
 		     inet_ntoa(rtp_end->addr),
-		     ntohs(rtp_end->rtp_port),
-		     ntohs(rtp_end->rtcp_port)
+		     ntohs(rtp_end->rtp_port), ntohs(rtp_end->rtcp_port)
 		    );
 	} else if (is_rtp) {
 		int cont;
@@ -640,19 +618,19 @@ int mgcp_send(struct mgcp_endpoint *endp, int dest, int is_rtp,
 		int len = rc;
 		do {
 			cont = endp->cfg->rtp_processing_cb(endp, rtp_end,
-							buf, &len, RTP_BUF_SIZE);
+							    buf, &len,
+							    RTP_BUF_SIZE);
 			if (cont < 0)
 				break;
 
-			mgcp_patch_and_count(endp, rtp_state, rtp_end, addr, buf, len);
-		LOGP(DLMGCP, LOGL_DEBUG,
-		     "endpoint %x process/send to %s %s %d %d\n",
-		     ENDPOINT_NUMBER(endp),
-		     (dest == MGCP_DEST_NET)? "net" : "bts",
-		     inet_ntoa(rtp_end->addr),
-		     ntohs(rtp_end->rtp_port),
-		     ntohs(rtp_end->rtcp_port)
-		    );
+			mgcp_patch_and_count(endp, rtp_state, rtp_end, addr,
+					     buf, len);
+			LOGP(DLMGCP, LOGL_DEBUG,
+			     "endpoint %x: process/send to %s %s rtp_port:%u rtcp_port:%u\n",
+			     ENDPOINT_NUMBER(endp), dest_name,
+			     inet_ntoa(rtp_end->addr), ntohs(rtp_end->rtp_port),
+			     ntohs(rtp_end->rtcp_port)
+			    );
 			forward_data(rtp_end->rtp.fd, &endp->taps[tap_idx],
 				     buf, len);
 
@@ -681,12 +659,11 @@ int mgcp_send(struct mgcp_endpoint *endp, int dest, int is_rtp,
 		return nbytes;
 	} else if (!tcfg->omit_rtcp) {
 		LOGP(DLMGCP, LOGL_DEBUG,
-		     "endpoint %x send to %s %s %d %d\n",
+		     "endpoint %x: send to %s %s rtp_port:%u rtcp_port:%u\n",
 		     ENDPOINT_NUMBER(endp),
-		     dest == MGCP_DEST_NET? "net" : "bts",
+		     dest_name,
 		     inet_ntoa(rtp_end->addr),
-		     ntohs(rtp_end->rtp_port),
-		     ntohs(rtp_end->rtcp_port)
+		     ntohs(rtp_end->rtp_port), ntohs(rtp_end->rtcp_port)
 		    );
 
 		return mgcp_udp_send(rtp_end->rtcp.fd,
@@ -796,8 +773,8 @@ static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
 
 	switch (endp->type) {
 	case MGCP_RTP_DEFAULT:
-		return mgcp_send(endp, MGCP_DEST_BTS, proto == MGCP_PROTO_RTP,
-				 &addr, buf, rc);
+		return mgcp_send(endp, proto == MGCP_PROTO_RTP,
+				 &addr, buf, rc, CONN_ID_NET, CONN_ID_BTS);
 	case MGCP_OSMUX_BSC_NAT:
 		return osmux_xfrm_to_osmux(MGCP_DEST_BTS, buf, rc, endp);
 	case MGCP_OSMUX_BSC:	/* Should not happen */
@@ -904,8 +881,8 @@ static int rtp_data_bts(struct osmo_fd *fd, unsigned int what)
 		LOGP(DLMGCP, LOGL_DEBUG,
 		     "rtp_data_bts: Endpoint %x MGCP_RTP_DEFAULT\n",
 		     ENDPOINT_NUMBER(endp));
-		return mgcp_send(endp, MGCP_DEST_NET, proto == MGCP_PROTO_RTP,
-				 &addr, buf, rc);
+		return mgcp_send(endp, proto == MGCP_PROTO_RTP,
+				 &addr, buf, rc, CONN_ID_BTS, CONN_ID_NET);
 	case MGCP_OSMUX_BSC:
 		/* OSMUX translation: BTS -> BSC */
 		return osmux_xfrm_to_osmux(MGCP_DEST_NET, buf, rc, endp);
