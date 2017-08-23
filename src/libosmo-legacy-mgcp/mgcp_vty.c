@@ -1408,7 +1408,7 @@ static int early_bind(struct mgcp_endpoint *endp, struct mgcp_trunk_config *trun
 
 	if (cfg->bts_ports.mode == PORT_ALLOC_STATIC) {
 		cfg->last_bts_port += 2;
-		if (mgcp_bind_bts_rtp_port(endp, cfg->last_bts_port) != 0) {
+		if (mgcp_bind_bts_rtp_port(endp, cfg->last_bts_port, conn_bts) != 0) {
 			LOGP(DLMGCP, LOGL_FATAL,
 			     "Failed to bind: %d\n", cfg->last_bts_port);
 			return -1;
@@ -1419,7 +1419,7 @@ static int early_bind(struct mgcp_endpoint *endp, struct mgcp_trunk_config *trun
 
 	if (cfg->net_ports.mode == PORT_ALLOC_STATIC) {
 		cfg->last_net_port += 2;
-		if (mgcp_bind_net_rtp_port(endp, cfg->last_net_port) != 0) {
+		if (mgcp_bind_net_rtp_port(endp, cfg->last_net_port, conn_net) != 0) {
 			LOGP(DLMGCP, LOGL_FATAL,
 			     "Failed to bind: %d\n", cfg->last_net_port);
 			return -1;
