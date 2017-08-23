@@ -286,7 +286,8 @@ int mgcp_send_reset_all(struct mgcp_config *cfg);
 
 
 int mgcp_create_bind(const char *source_addr, struct osmo_fd *fd, int port);
-int mgcp_send(struct mgcp_endpoint *endp, int dest, int is_rtp, struct sockaddr_in *addr, char *buf, int rc);
+int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
+	      char *buf, int rc, uint32_t conn_src_id, uint32_t conn_dst_id);
 int mgcp_udp_send(int fd, struct in_addr *addr, int port, char *buf, int len);
 
 #endif
