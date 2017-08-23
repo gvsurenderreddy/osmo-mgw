@@ -90,19 +90,17 @@ int mgcp_udp_send(int fd, struct in_addr *addr, int port, char *buf, int len)
 	return sendto(fd, buf, len, 0, (struct sockaddr *)&out, sizeof(out));
 }
 
-int mgcp_send_dummy(struct mgcp_endpoint *endp)
+int mgcp_send_dummy(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn)
 {
-	struct mgcp_conn_rtp *conn_net = NULL;
 	static char buf[] = { MGCP_DUMMY_LOAD };
 	int rc;
 	int was_rtcp = 0;
 
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_net)
-		goto failed;
+	OSMO_ASSERT(endp);
+	OSMO_ASSERT(conn);
 
-	rc = mgcp_udp_send(conn_net->end.rtp.fd, &conn_net->end.addr,
-			   conn_net->end.rtp_port, buf, 1);
+	rc = mgcp_udp_send(conn->end.rtp.fd, &conn->end.addr,
+			   conn->end.rtp_port, buf, 1);
 
 	if (rc == -1)
 		goto failed;
@@ -111,8 +109,8 @@ int mgcp_send_dummy(struct mgcp_endpoint *endp)
 		return rc;
 
 	was_rtcp = 1;
-	rc = mgcp_udp_send(conn_net->end.rtcp.fd, &conn_net->end.addr,
-			   conn_net->end.rtcp_port, buf, 1);
+	rc = mgcp_udp_send(conn->end.rtcp.fd, &conn->end.addr,
+			   conn->end.rtcp_port, buf, 1);
 
 	if (rc >= 0)
 		return rc;
@@ -121,8 +119,8 @@ failed:
 	LOGP(DLMGCP, LOGL_ERROR,
 		"Failed to send dummy %s packet: %s on: 0x%x to %s:%d\n",
 		was_rtcp ? "RTCP" : "RTP",
-		strerror(errno), ENDPOINT_NUMBER(endp), inet_ntoa(conn_net->end.addr),
-		was_rtcp ? conn_net->end.rtcp_port : conn_net->end.rtp_port);
+		strerror(errno), ENDPOINT_NUMBER(endp), inet_ntoa(conn->end.addr),
+		was_rtcp ? conn->end.rtcp_port : conn->end.rtp_port);
 
 	return -1;
 }
