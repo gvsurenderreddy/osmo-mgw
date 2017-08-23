@@ -919,22 +919,41 @@ int mgcp_create_bind(const char *source_addr, struct osmo_fd *fd, int port)
 	struct sockaddr_in addr;
 	int on = 1;
 
+	printf("mgcp_create_bind()\n");
+
 	fd->fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd->fd < 0) {
-		LOGP(DLMGCP, LOGL_ERROR, "Failed to create UDP port.\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to create UDP port (%s:%i).\n",
+		     source_addr, port);
+		return -1;
+	} else {
+		LOGP(DLMGCP, LOGL_DEBUG,
+		     "Successfully created UDP port (%s:%i).\n", source_addr,
+		     port);
+	}
+
+	if (setsockopt(fd->fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "Failed to set socket options (%s:%i).\n", source_addr,
+		     port);
 		return -1;
 	}
 
-	setsockopt(fd->fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	inet_aton(source_addr, &addr.sin_addr);
 
-	if (bind(fd->fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
+	if (bind(fd->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		close(fd->fd);
 		fd->fd = -1;
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to bind UDP port (%s:%i).\n",
+		     source_addr, port);
 		return -1;
+	} else {
+		LOGP(DLMGCP, LOGL_DEBUG,
+		     "Successfully bound UDP port (%s:%i).\n", source_addr,
+		     port);
 	}
 
 	return 0;
@@ -1031,6 +1050,8 @@ int mgcp_bind_bts_rtp_port(struct mgcp_endpoint *endp, int rtp_port)
 int mgcp_bind_net_rtp_port(struct mgcp_endpoint *endp, int rtp_port)
 {
 	struct mgcp_conn_rtp *conn_net = NULL;
+
+	printf("mgcp_bind_net_rtp_port()\n");
 
 	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
 	if (!conn_net)
