@@ -238,7 +238,9 @@ static void scheduled_tx_net_cb(struct msgb *msg, void *data)
 	conn_bts->end.octets += msg->len;
 	conn_bts->end.packets++;
 
-	mgcp_send(endp, MGCP_DEST_NET, 1, &addr, (char *)msg->data, msg->len);
+	/* Send RTP data to NET */
+	mgcp_send(endp, 1, &addr, (char *)msg->data, msg->len,
+		  CONN_ID_BTS, CONN_ID_NET);
 	msgb_free(msg);
 }
 
@@ -261,7 +263,9 @@ static void scheduled_tx_bts_cb(struct msgb *msg, void *data)
 	conn_net->end.octets += msg->len;
 	conn_net->end.packets++;
 
-	mgcp_send(endp, MGCP_DEST_BTS, 1, &addr, (char *)msg->data, msg->len);
+	/* Send RTP data to BTS */
+	mgcp_send(endp, 1, &addr, (char *)msg->data, msg->len,
+		  CONN_ID_NET, CONN_ID_BTS);
 	msgb_free(msg);
 }
 
