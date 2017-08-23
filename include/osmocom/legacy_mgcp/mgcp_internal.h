@@ -148,9 +148,13 @@ enum mgcp_type {
 };
 
 #include <osmocom/legacy_mgcp/osmux.h>
+struct mgcp_conn;
 
 /* MGCP connection (RTP) */
 struct mgcp_conn_rtp {
+
+	/* Backpointer to conn struct */
+	struct mgcp_conn *conn;;
 
 	/* Port status */
 	struct mgcp_rtp_end end;
