@@ -1391,8 +1391,10 @@ int mgcp_endpoints_allocate(struct mgcp_trunk_config *tcfg)
 
 	for (i = 0; i < tcfg->number_endpoints; ++i) {
 		INIT_LLIST_HEAD(&tcfg->endpoints[i].conns);
-		mgcp_conn_alloc(NULL, &tcfg->endpoints[i].conns, CONN_ID_BTS, MGCP_CONN_TYPE_RTP);
-		mgcp_conn_alloc(NULL, &tcfg->endpoints[i].conns, CONN_ID_NET, MGCP_CONN_TYPE_RTP);
+		mgcp_conn_alloc(NULL, &tcfg->endpoints[i].conns,
+				CONN_ID_BTS, MGCP_CONN_TYPE_RTP, "BTS");
+		mgcp_conn_alloc(NULL, &tcfg->endpoints[i].conns,
+				CONN_ID_NET, MGCP_CONN_TYPE_RTP, "NET");
 		conn_net = mgcp_conn_get_rtp(&tcfg->endpoints[i].conns, CONN_ID_NET);
 		OSMO_ASSERT(conn_net);
 		conn_bts = mgcp_conn_get_rtp(&tcfg->endpoints[i].conns, CONN_ID_BTS);
