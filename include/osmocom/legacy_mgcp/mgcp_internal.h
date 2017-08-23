@@ -279,7 +279,7 @@ struct mgcp_parse_data {
 	int found;
 };
 
-int mgcp_send_dummy(struct mgcp_endpoint *endp);
+int mgcp_send_dummy(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn);
 int mgcp_bind_bts_rtp_port(struct mgcp_endpoint *endp, int rtp_port);
 int mgcp_bind_net_rtp_port(struct mgcp_endpoint *endp, int rtp_port);
 int mgcp_bind_trans_bts_rtp_port(struct mgcp_endpoint *enp, int rtp_port);
