@@ -30,11 +30,13 @@
  *  \param[in] type connection type (e.g. MGCP_CONN_TYPE_RTP)
  *  \returns pointer to allocated connection, NULL on error */
 struct mgcp_conn *mgcp_conn_alloc(void *ctx, struct llist_head *conns,
-				  uint32_t id, enum mgcp_conn_type type)
+				  uint32_t id, enum mgcp_conn_type type,
+				  char *name)
 {
 	struct mgcp_conn *conn;
 	OSMO_ASSERT(conns);
-	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL)
+	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL);
+	OSMO_ASSERT(strlen(name) < sizeof(conn->name));
 
 	/* Prevent duplicate connection IDs */
 	if (mgcp_conn_get(conns, id))
@@ -46,6 +48,7 @@ struct mgcp_conn *mgcp_conn_alloc(void *ctx, struct llist_head *conns,
 		return NULL;
 	conn->type = type;
 	conn->id = id;
+	strcpy(conn->name, name);
 	llist_add(&conn->entry, conns);
 
 	return conn;
@@ -58,7 +61,7 @@ struct mgcp_conn *mgcp_conn_alloc(void *ctx, struct llist_head *conns,
 struct mgcp_conn *mgcp_conn_get(struct llist_head *conns, uint32_t id)
 {
 	OSMO_ASSERT(conns);
-	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL)
+	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL);
 
 	struct mgcp_conn *conn;
 
@@ -77,7 +80,7 @@ struct mgcp_conn *mgcp_conn_get(struct llist_head *conns, uint32_t id)
 struct mgcp_conn_rtp *mgcp_conn_get_rtp(struct llist_head *conns, uint32_t id)
 {
 	OSMO_ASSERT(conns);
-	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL)
+	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL);
 
 	struct mgcp_conn *conn;
 
@@ -97,7 +100,7 @@ struct mgcp_conn_rtp *mgcp_conn_get_rtp(struct llist_head *conns, uint32_t id)
 void mgcp_conn_free(struct llist_head *conns, uint32_t id)
 {
 	OSMO_ASSERT(conns);
-	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL)
+	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL);
 
 	struct mgcp_conn *conn;
 
@@ -114,7 +117,7 @@ void mgcp_conn_free(struct llist_head *conns, uint32_t id)
 void mgcp_conn_free_all(struct llist_head *conns)
 {
 	OSMO_ASSERT(conns);
-	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL)
+	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL);
 
 	struct mgcp_conn *conn;
 	struct mgcp_conn *conn_tmp;
@@ -126,4 +129,38 @@ void mgcp_conn_free_all(struct llist_head *conns)
 	}
 
 	return;
+}
+
+/*! \brief dump basic connection information to human readble string
+ *  \param[in] conn to dump
+ *  \returns human readble string */
+char *mgcp_conn_dump(struct mgcp_conn *conn)
+{
+	static char str[256];
+
+	if (!conn) {
+		snprintf(str, sizeof(str), "(null connection)");
+		return str;
+	}
+
+	switch (conn->type) {
+	case MGCP_CONN_TYPE_RTP:
+		/* Dump RTP connection */
+		snprintf(str, sizeof(str), "(name: %s, type:rtp, id:%u, ip:%s,"
+			 "ports:%u/%u, packets:%u)",
+			 conn->name,
+			 conn->id,
+			 inet_ntoa(conn->u.rtp.end.addr),
+			 conn->u.rtp.end.rtp_port,
+			 conn->u.rtp.end.rtcp_port, conn->u.rtp.end.packets);
+		break;
+
+	default:
+		/* Should not happen, we should be able to dump
+		 * every possible connection type. */
+		snprintf(str, sizeof(str), "(unknown connection type)");
+		break;
+	}
+
+	return str;
 }
