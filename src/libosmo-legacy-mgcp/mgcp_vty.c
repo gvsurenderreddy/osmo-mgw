@@ -158,13 +158,12 @@ static int config_write_mgcp(struct vty *vty)
 	return CMD_SUCCESS;
 }
 
-static void dump_rtp_end(const char *end_name, struct vty *vty,
-			struct mgcp_rtp_state *state, struct mgcp_rtp_end *end)
+static void dump_rtp_end(struct vty *vty, struct mgcp_rtp_state *state,
+			 struct mgcp_rtp_end *end)
 {
 	struct mgcp_rtp_codec *codec = &end->codec;
 
 	vty_out(vty,
-		"  %s%s"
 		"   Timestamp Errs: %d->%d%s"
 		"   Dropped Packets: %d%s"
 		"   Payload Type: %d Rate: %u Channels: %d %s"
@@ -172,7 +171,6 @@ static void dump_rtp_end(const char *end_name, struct vty *vty,
 		"   FPP: %d Packet Duration: %u%s"
 		"   FMTP-Extra: %s Audio-Name: %s Sub-Type: %s%s"
 		"   Output-Enabled: %d Force-PTIME: %d%s",
-		end_name, VTY_NEWLINE,
 		state->in_stream.err_ts_counter,
 		state->out_stream.err_ts_counter, VTY_NEWLINE,
 		end->dropped_packets, VTY_NEWLINE,
@@ -187,8 +185,7 @@ static void dump_trunk(struct vty *vty, struct mgcp_trunk_config *cfg,
 		       int verbose)
 {
 	int i;
-	struct mgcp_conn_rtp *conn_net = NULL;
-	struct mgcp_conn_rtp *conn_bts = NULL;
+	struct mgcp_conn *conn;
 
 	vty_out(vty, "%s trunk nr %d with %d endpoints:%s",
 		cfg->trunk_type == MGCP_TRUNK_VIRTUAL ? "Virtual" : "E1",
@@ -202,35 +199,22 @@ static void dump_trunk(struct vty *vty, struct mgcp_trunk_config *cfg,
 	for (i = 1; i < cfg->number_endpoints; ++i) {
 		struct mgcp_endpoint *endp = &cfg->endpoints[i];
 
-		conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
-		conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-		if (conn_bts && conn_net) {
-			vty_out(vty,
-				" Endpoint 0x%.2x: CI: %d net: %u/%u bts: %u/%u on %s "
-				"traffic received bts: %u  remote: %u%s",
-				i, endp->ci,
-				ntohs(conn_net->end.rtp_port),
-				ntohs(conn_net->end.rtcp_port),
-				ntohs(conn_bts->end.rtp_port),
-				ntohs(conn_bts->end.rtcp_port),
-				inet_ntoa(conn_bts->end.addr),
-				conn_bts->end.packets,
-				conn_net->end.packets,
-				VTY_NEWLINE);
+		vty_out(vty, "Endpoint 0x%.2x: CI: %d%s",
+			i, endp->ci, VTY_NEWLINE);
+
+		llist_for_each_entry(conn, &endp->conns, entry) {
+			vty_out(vty, "   CONN: %s%s",
+				mgcp_conn_dump(conn), VTY_NEWLINE);
 
 			if (verbose && endp->allocated) {
-				dump_rtp_end("Net->BTS", vty,
-					     &conn_bts->state,
-					     &conn_bts->end);
-				dump_rtp_end("BTS->Net", vty,
-					     &conn_net->state,
-					     &conn_net->end);
+				/* FIXME: Also add verbosity for other
+				 * connection types (E1) as soon as
+				 * the implementation is available */
+				if (conn->type == MGCP_CONN_TYPE_RTP) {
+					dump_rtp_end(vty, &conn->u.rtp.state,
+						     &conn->u.rtp.end);
+				}
 			}
-
-		} else {
-			vty_out(vty,
-				" Endpoint 0x%.2x: CI: %d (no connection)%s",
-				i, endp->ci, VTY_NEWLINE);
 		}
 	}
 }
@@ -1038,12 +1022,12 @@ DEFUN(loop_endp,
       loop_endp_cmd,
       "loop-endpoint <0-64> NAME (0|1)",
       "Loop a given endpoint\n" "Trunk number\n"
-      "The name in hex of the endpoint\n" "Disable the loop\n" "Enable the loop\n")
+      "The name in hex of the endpoint\n" "Disable the loop\n"
+      "Enable the loop\n")
 {
 	struct mgcp_trunk_config *trunk;
 	struct mgcp_endpoint *endp;
-	struct mgcp_conn_rtp *conn_net = NULL;
-	struct mgcp_conn_rtp *conn_bts = NULL;
+	struct mgcp_conn *conn;
 
 	trunk = find_trunk(g_cfg, atoi(argv[0]));
 	if (!trunk) {
@@ -1065,16 +1049,7 @@ DEFUN(loop_endp,
 		return CMD_WARNING;
 	}
 
-
 	endp = &trunk->endpoints[endp_no];
-
-	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_bts || !conn_net) {
-		vty_out(vty, "%%No RTP connection present on endpoint numer %u.%s",
-		        endp_no, VTY_NEWLINE);
-		return CMD_WARNING;
-	}
 
 	int loop = atoi(argv[2]);
 	if (loop)
@@ -1082,9 +1057,18 @@ DEFUN(loop_endp,
 	else
 		endp->conn_mode = endp->orig_mode;
 
-	/* Handle it like a MDCX, switch on SSRC patching if enabled */
-	mgcp_rtp_end_config(endp, 1, &conn_bts->end);
-	mgcp_rtp_end_config(endp, 1, &conn_net->end);
+	llist_for_each_entry(conn, &endp->conns, entry) {
+		if (conn->type == MGCP_CONN_TYPE_RTP)
+			/* Handle it like a MDCX, switch on SSRC patching if enabled */
+			mgcp_rtp_end_config(endp, 1, &conn->u.rtp.end);
+		else {
+			/* FIXME: Introduce support for other connection (E1)
+			 * types when implementation is available */
+			vty_out(vty, "%%Can't enable SSRC patching,"
+				"connection %s is not an RTP connection.%s",
+				mgcp_conn_dump(conn), VTY_NEWLINE);
+		}
+	}
 
 	return CMD_SUCCESS;
 }
@@ -1416,6 +1400,11 @@ static int early_bind(struct mgcp_endpoint *endp, struct mgcp_trunk_config *trun
 		     "RTP connections not yet initalized, Can not bind!\n");
 		return -1;
 	}
+
+	/* FIXME: It looks just like that the early binding, is not compatible
+	 * with the idea of dynamically allocated rtp connections. We will have
+	 * to go for a dynamic allocation that picks from a port range and get
+	 * rid of the static allocation/pre-binding completely. */
 
 	if (cfg->bts_ports.mode == PORT_ALLOC_STATIC) {
 		cfg->last_bts_port += 2;
