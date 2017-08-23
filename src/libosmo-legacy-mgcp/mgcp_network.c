@@ -1038,30 +1038,18 @@ static int int_bind(const char *port,
 	return bind_rtp(_endp->cfg, source_addr, end, ENDPOINT_NUMBER(_endp));
 }
 
-int mgcp_bind_bts_rtp_port(struct mgcp_endpoint *endp, int rtp_port)
+int mgcp_bind_bts_rtp_port(struct mgcp_endpoint *endp, int rtp_port,
+			   struct mgcp_conn_rtp *conn)
 {
-	struct mgcp_conn_rtp *conn_bts = NULL;
-
-	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
-	if (!conn_bts)
-		return -1;
-
-	return int_bind("bts-port", &conn_bts->end,
+	return int_bind("bts-port", &conn->end,
 			rtp_data_bts, endp,
 			mgcp_bts_src_addr(endp), rtp_port);
 }
 
-int mgcp_bind_net_rtp_port(struct mgcp_endpoint *endp, int rtp_port)
+int mgcp_bind_net_rtp_port(struct mgcp_endpoint *endp, int rtp_port,
+			   struct mgcp_conn_rtp *conn)
 {
-	struct mgcp_conn_rtp *conn_net = NULL;
-
-	printf("mgcp_bind_net_rtp_port()\n");
-
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_net)
-		return -1;
-
-	return int_bind("net-port", &conn_net->end,
+	return int_bind("net-port", &conn->end,
 			rtp_data_net, endp,
 			mgcp_net_src_addr(endp), rtp_port);
 }

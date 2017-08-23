@@ -280,8 +280,10 @@ struct mgcp_parse_data {
 };
 
 int mgcp_send_dummy(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn);
-int mgcp_bind_bts_rtp_port(struct mgcp_endpoint *endp, int rtp_port);
-int mgcp_bind_net_rtp_port(struct mgcp_endpoint *endp, int rtp_port);
+int mgcp_bind_bts_rtp_port(struct mgcp_endpoint *endp, int rtp_port,
+			   struct mgcp_conn_rtp *conn);
+int mgcp_bind_net_rtp_port(struct mgcp_endpoint *endp, int rtp_port,
+			   struct mgcp_conn_rtp *conn);
 int mgcp_bind_trans_bts_rtp_port(struct mgcp_endpoint *enp, int rtp_port);
 int mgcp_bind_trans_net_rtp_port(struct mgcp_endpoint *enp, int rtp_port);
 int mgcp_free_rtp_port(struct mgcp_rtp_end *end);
