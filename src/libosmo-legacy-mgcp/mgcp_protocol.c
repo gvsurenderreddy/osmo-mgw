@@ -362,7 +362,7 @@ static void send_dummy(struct mgcp_endpoint *endp)
 	if (conn_net->osmux.state != OSMUX_STATE_DISABLED)
 		osmux_send_dummy(endp);
 	else
-		mgcp_send_dummy(endp);
+		mgcp_send_dummy(endp, conn_net);
 }
 
 /*
