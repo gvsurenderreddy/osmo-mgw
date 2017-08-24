@@ -1444,10 +1444,13 @@ void mgcp_release_endp(struct mgcp_endpoint *endp)
 	/* Note: This would be a good location to free the rtp
 	 * connections, currently the memory is statically allocated,
 	 * so we go for memsetting it */
-
 	if (conn_bts && conn_net) {
 		memset(&conn_net->state, 0, sizeof(conn_net->state));
 		memset(&conn_bts->state, 0, sizeof(conn_bts->state));
+		memset(&conn_bts->tap_in, 0, sizeof(conn_bts->tap_in));
+		memset(&conn_bts->tap_out, 0, sizeof(conn_bts->tap_out));
+		memset(&conn_net->tap_in, 0, sizeof(conn_net->tap_in));
+		memset(&conn_net->tap_out, 0, sizeof(conn_net->tap_out));
 	}
 
 	endp->conn_mode = endp->orig_mode = MGCP_CONN_NONE;
@@ -1458,7 +1461,6 @@ void mgcp_release_endp(struct mgcp_endpoint *endp)
 	/* release the circuit ID if it had been allocated */
 	osmux_release_cid(endp);
 
-	memset(&endp->taps, 0, sizeof(endp->taps));
 }
 
 void mgcp_initialize_endp(struct mgcp_endpoint *endp)

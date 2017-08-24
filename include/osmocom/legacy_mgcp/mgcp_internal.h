@@ -119,16 +119,6 @@ struct mgcp_rtp_end {
 	int local_alloc;
 };
 
-enum {
-	MGCP_TAP_BTS_IN,
-	MGCP_TAP_BTS_OUT,
-	MGCP_TAP_NET_IN,
-	MGCP_TAP_NET_OUT,
-
-	/* last element */
-	MGCP_TAP_COUNT
-};
-
 struct mgcp_rtp_tap {
 	int enabled;
 	struct sockaddr_in forward;
@@ -161,6 +151,10 @@ struct mgcp_conn_rtp {
 
 	/* Sequence bits */
 	struct mgcp_rtp_state state;
+
+	/* taps for the rtp connection */
+	struct mgcp_rtp_tap tap_in;
+	struct mgcp_rtp_tap tap_out;
 
 	/* Osmux states (optional) */
 	struct {
@@ -230,9 +224,6 @@ struct mgcp_endpoint {
 	/* fields for re-transmission */
 	char *last_trans;
 	char *last_response;
-
-	/* tap for the endpoint */
-	struct mgcp_rtp_tap taps[MGCP_TAP_COUNT];
 };
 
 #define for_each_line(line, save)			\

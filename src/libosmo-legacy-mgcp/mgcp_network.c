@@ -572,7 +572,6 @@ int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
 	struct mgcp_trunk_config *tcfg = endp->tcfg;
 	struct mgcp_rtp_end *rtp_end;
 	struct mgcp_rtp_state *rtp_state;
-	int tap_idx;
 	struct mgcp_conn_rtp *conn_src;
 	struct mgcp_conn_rtp *conn_dst;
 	char *dest_name;
@@ -594,12 +593,10 @@ int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
 	if (endp->conn_mode != MGCP_CONN_LOOPBACK) {
 		rtp_end = &conn_dst->end;
 		rtp_state = &conn_src->state;
-		tap_idx = MGCP_TAP_NET_OUT;
 		dest_name = conn_dst->conn->name;
 	} else {
 		rtp_end = &conn_src->end;
 		rtp_state = &conn_dst->state;
-		tap_idx = MGCP_TAP_BTS_OUT;
 		dest_name = conn_src->conn->name;
 	}
 
@@ -631,11 +628,10 @@ int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
 			     inet_ntoa(rtp_end->addr), ntohs(rtp_end->rtp_port),
 			     ntohs(rtp_end->rtcp_port)
 			    );
-			forward_data(rtp_end->rtp.fd, &endp->taps[tap_idx],
+			forward_data(rtp_end->rtp.fd, &conn_dst->tap_out,
 				     buf, len);
 
-			if (tap_idx == MGCP_TAP_BTS_OUT
-			    && !rtp_state->patched_first_rtp_payload) {
+			if (!rtp_state->patched_first_rtp_payload) {
 				uint8_t *data = (uint8_t *) & buf[12];
 				osmo_hexparse("e400", data, 2);
 				rtp_state->patched_first_rtp_payload = true;
@@ -763,7 +759,7 @@ static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
 	conn_net->end.packets += 1;
 	conn_net->end.octets += rc;
 
-	forward_data(fd->fd, &endp->taps[MGCP_TAP_NET_IN], buf, rc);
+	forward_data(fd->fd, &conn_net->tap_in, buf, rc);
 
 	switch (endp->type) {
 	case MGCP_RTP_DEFAULT:
@@ -868,7 +864,7 @@ static int rtp_data_bts(struct osmo_fd *fd, unsigned int what)
 	conn_bts->end.packets += 1;
 	conn_bts->end.octets += rc;
 
-	forward_data(fd->fd, &endp->taps[MGCP_TAP_BTS_IN], buf, rc);
+	forward_data(fd->fd, &conn_bts->tap_in, buf, rc);
 
 	switch (endp->type) {
 	case MGCP_RTP_DEFAULT:
