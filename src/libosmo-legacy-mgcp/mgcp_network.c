@@ -582,12 +582,12 @@ int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
 	if (!conn_src || !conn_dst)
 		return -1;
 
-	LOGP(DLMGCP, LOGL_DEBUG, "endpoint %x: src_conn:%s\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "mgcp_send: endpoint %x: src_conn:%s\n",
 	     ENDPOINT_NUMBER(endp), mgcp_conn_dump(conn_src->conn));
-	LOGP(DLMGCP, LOGL_DEBUG, "endpoint %x: dst_conn:%s\n",
+	LOGP(DLMGCP, LOGL_DEBUG, "mgcp_send: endpoint %x: dst_conn:%s\n",
 	     ENDPOINT_NUMBER(endp), mgcp_conn_dump(conn_dst->conn));
 	LOGP(DLMGCP, LOGL_DEBUG,
-	     "endpoint %x: loop:%d, mode:%d (== loopback: %d)\n",
+	     "mgcp_send: endpoint %x: loop:%d, mode:%d (== loopback: %d)\n",
 	     ENDPOINT_NUMBER(endp), tcfg->audio_loop, endp->conn_mode,
 	     endp->conn_mode == MGCP_CONN_LOOPBACK);
 
@@ -604,7 +604,8 @@ int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
 	if (!rtp_end->output_enabled) {
 		rtp_end->dropped_packets += 1;
 		LOGP(DLMGCP, LOGL_DEBUG,
-		     "endpoint %x: output disabled, drop to %s %s rtp_port:%u rtcp_port:%u\n",
+		     "mgcp_send: endpoint %x: output disabled, drop to %s %s "
+		     "rtp_port:%u rtcp_port:%u\n",
 		     ENDPOINT_NUMBER(endp),
 		     dest_name,
 		     inet_ntoa(rtp_end->addr),
@@ -624,7 +625,8 @@ int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
 			mgcp_patch_and_count(endp, rtp_state, rtp_end, addr,
 					     buf, len);
 			LOGP(DLMGCP, LOGL_DEBUG,
-			     "endpoint %x: process/send to %s %s rtp_port:%u rtcp_port:%u\n",
+			     "mgcp_send: endpoint %x: process/send to %s %s "
+			     "rtp_port:%u rtcp_port:%u\n",
 			     ENDPOINT_NUMBER(endp), dest_name,
 			     inet_ntoa(rtp_end->addr), ntohs(rtp_end->rtp_port),
 			     ntohs(rtp_end->rtcp_port)
@@ -654,7 +656,7 @@ int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
 		return nbytes;
 	} else if (!tcfg->omit_rtcp) {
 		LOGP(DLMGCP, LOGL_DEBUG,
-		     "endpoint %x: send to %s %s rtp_port:%u rtcp_port:%u\n",
+		     "mgcp_send: endpoint %x: send to %s %s rtp_port:%u rtcp_port:%u\n",
 		     ENDPOINT_NUMBER(endp),
 		     dest_name,
 		     inet_ntoa(rtp_end->addr),
