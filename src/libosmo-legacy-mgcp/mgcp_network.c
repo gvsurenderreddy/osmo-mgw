@@ -697,202 +697,140 @@ static int receive_from(struct mgcp_endpoint *endp, int fd, struct sockaddr_in *
 	return rc;
 }
 
-static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
-{
-	char buf[RTP_BUF_SIZE];
-	struct sockaddr_in addr;
-	struct mgcp_endpoint *endp;
-	int rc, proto;
-	struct mgcp_conn_rtp *conn_net = NULL;
-	struct mgcp_conn_rtp *conn_bts = NULL;
-
-	endp = (struct mgcp_endpoint *) fd->data;
-
-	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_bts || !conn_net)
-		return -1;
-
-	rc = receive_from(endp, fd->fd, &addr, buf, sizeof(buf));
-	if (rc <= 0)
-		return -1;
-
-	LOGP(DLMGCP, LOGL_DEBUG,
-	     "endpoint %x",
-	     ENDPOINT_NUMBER(endp));
-	LOGPC(DLMGCP, LOGL_DEBUG,
-	      " from net %s %d",
-	      inet_ntoa(addr.sin_addr),
-	      ntohs(addr.sin_port));
-	LOGPC(DLMGCP, LOGL_DEBUG,
-	      " conn[1].u.rtp.end %s %d %d",
-	      inet_ntoa(conn_net->end.addr),
-	      ntohs(conn_net->end.rtp_port),
-	      ntohs(conn_net->end.rtcp_port));
-	LOGPC(DLMGCP, LOGL_DEBUG,
-	      " conn[0].u.rtp.end %s %d %d\n",
-	      inet_ntoa(conn_bts->end.addr),
-	      ntohs(conn_bts->end.rtp_port),
-	      ntohs(conn_bts->end.rtcp_port)
-	     );
-
-	if (memcmp(&addr.sin_addr, &conn_net->end.addr, sizeof(addr.sin_addr)) != 0) {
-		LOGP(DLMGCP, LOGL_ERROR,
-			"rtp_data_net: Endpoint 0x%x data from wrong address %s vs. ",
-			ENDPOINT_NUMBER(endp), inet_ntoa(addr.sin_addr));
-		LOGPC(DLMGCP, LOGL_ERROR,
-			"%s\n", inet_ntoa(conn_net->end.addr));
-		return -1;
-	}
-
-	switch(endp->type) {
-	case MGCP_RTP_DEFAULT:
-	case MGCP_OSMUX_BSC:
-	case MGCP_OSMUX_BSC_NAT:
-		break;
-	}
-
-	LOGP(DLMGCP, LOGL_DEBUG,
-	     "rtp_data_net: Endpoint %x data from %s %d\n",
-	     ENDPOINT_NUMBER(endp),
-	     inet_ntoa(addr.sin_addr),
-	     ntohs(addr.sin_port));
-
-	/* throw away the dummy message */
-	if (rc == 1 && buf[0] == MGCP_DUMMY_LOAD) {
-		LOGP(DLMGCP, LOGL_NOTICE, "Filtered dummy from network on 0x%x\n",
-			ENDPOINT_NUMBER(endp));
-		return 0;
-	}
-
-	proto = fd == &conn_net->end.rtp ? MGCP_PROTO_RTP : MGCP_PROTO_RTCP;
-	conn_net->end.packets_rx += 1;
-	conn_net->end.octets_rx += rc;
-
-	forward_data(fd->fd, &conn_net->tap_in, buf, rc);
-
-	switch (endp->type) {
-	case MGCP_RTP_DEFAULT:
-		return mgcp_send(endp, proto == MGCP_PROTO_RTP,
-				 &addr, buf, rc, CONN_ID_NET, CONN_ID_BTS);
-	case MGCP_OSMUX_BSC_NAT:
-		return osmux_xfrm_to_osmux(MGCP_DEST_BTS, buf, rc, endp);
-	case MGCP_OSMUX_BSC:	/* Should not happen */
-		break;
-	}
-
-	LOGP(DLMGCP, LOGL_ERROR, "Bad MGCP type %u on endpoint %u\n",
-	     endp->type, ENDPOINT_NUMBER(endp));
-	return 0;
-}
-
-static void discover_bts(struct mgcp_endpoint *endp, int proto, struct sockaddr_in *addr)
+static void discover_bts(struct mgcp_endpoint *endp, int proto,
+			 struct sockaddr_in *addr, struct mgcp_conn_rtp *conn)
 {
 	struct mgcp_config *cfg = endp->cfg;
-	struct mgcp_conn_rtp *conn_bts = NULL;
 
-	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
-	if (!conn_bts)
+	if (!conn)
 		return;
 
-	if (proto == MGCP_PROTO_RTP && conn_bts->end.rtp_port == 0) {
+	if (proto == MGCP_PROTO_RTP && conn->end.rtp_port == 0) {
 		if (!cfg->bts_ip ||
 		    memcmp(&addr->sin_addr,
 			   &cfg->bts_in, sizeof(cfg->bts_in)) == 0 ||
 		    memcmp(&addr->sin_addr,
-			   &conn_bts->end.addr, sizeof(conn_bts->end.addr)) == 0) {
+			   &conn->end.addr, sizeof(conn->end.addr)) == 0) {
 
-			conn_bts->end.rtp_port = addr->sin_port;
-			conn_bts->end.addr = addr->sin_addr;
+			conn->end.rtp_port = addr->sin_port;
+			conn->end.addr = addr->sin_addr;
 
 			LOGP(DLMGCP, LOGL_NOTICE,
 				"Found BTS for endpoint: 0x%x on port: %d/%d of %s\n",
-				ENDPOINT_NUMBER(endp), ntohs(conn_bts->end.rtp_port),
-				ntohs(conn_bts->end.rtcp_port), inet_ntoa(addr->sin_addr));
+				ENDPOINT_NUMBER(endp), ntohs(conn->end.rtp_port),
+				ntohs(conn->end.rtcp_port), inet_ntoa(addr->sin_addr));
 		}
-	} else if (proto == MGCP_PROTO_RTCP && conn_bts->end.rtcp_port == 0) {
-		if (memcmp(&conn_bts->end.addr, &addr->sin_addr,
-				sizeof(conn_bts->end.addr)) == 0) {
-			conn_bts->end.rtcp_port = addr->sin_port;
+	} else if (proto == MGCP_PROTO_RTCP && conn->end.rtcp_port == 0) {
+		if (memcmp(&conn->end.addr, &addr->sin_addr,
+				sizeof(conn->end.addr)) == 0) {
+			conn->end.rtcp_port = addr->sin_port;
 		}
 	}
 }
 
-static int rtp_data_bts(struct osmo_fd *fd, unsigned int what)
+/* Receive RTP data from a specified source connection and dispatch it to a
+ * destination connection. */
+static int mgcp_recv(struct osmo_fd *fd, uint32_t conn_src_id,
+		     uint32_t conn_dst_id)
 {
 	char buf[RTP_BUF_SIZE];
 	struct sockaddr_in addr;
 	struct mgcp_endpoint *endp;
 	int rc, proto;
-	struct mgcp_conn_rtp *conn_bts = NULL;
+	struct mgcp_conn_rtp *conn = NULL;
 
-	endp = (struct mgcp_endpoint *) fd->data;
+	endp = (struct mgcp_endpoint *)fd->data;
 
-	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
-	if (!conn_bts)
+	conn = mgcp_conn_get_rtp(&endp->conns, conn_src_id);
+	if (!conn)
 		return -1;
 
 	rc = receive_from(endp, fd->fd, &addr, buf, sizeof(buf));
 	if (rc <= 0)
 		return -1;
 
-	proto = fd == &conn_bts->end.rtp ? MGCP_PROTO_RTP : MGCP_PROTO_RTCP;
+	proto = fd == &conn->end.rtp ? MGCP_PROTO_RTP : MGCP_PROTO_RTCP;
+	discover_bts(endp, proto, &addr, conn);
 
-	/* We have no idea who called us, maybe it is the BTS. */
-	/* it was the BTS... */
-	discover_bts(endp, proto, &addr);
+	LOGP(DLMGCP, LOGL_DEBUG, "mgcp_recv: endpoint %x: ",
+	     ENDPOINT_NUMBER(endp));
+	LOGPC(DLMGCP, LOGL_DEBUG, "receiveing from net %s %d\n",
+	      inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
+	LOGP(DLMGCP, LOGL_DEBUG, "mcgp_recv: endpoint %x: conn:%s\n",
+	     ENDPOINT_NUMBER(endp), mgcp_conn_dump(conn->conn));
 
-	if (memcmp(&conn_bts->end.addr, &addr.sin_addr, sizeof(addr.sin_addr)) != 0) {
+	/* Check if the origin of the incoming RTP data seems plausible */
+	if (memcmp(&addr.sin_addr, &conn->end.addr, sizeof(addr.sin_addr)) != 0) {
 		LOGP(DLMGCP, LOGL_ERROR,
-			"rtp_data_bts: Data from wrong bts %s on 0x%x\n",
-			inet_ntoa(addr.sin_addr), ENDPOINT_NUMBER(endp));
+		     "mgcp_recv: endpoint %x: data from wrong address: %s, ",
+		     ENDPOINT_NUMBER(endp), inet_ntoa(addr.sin_addr));
+		LOGPC(DLMGCP, LOGL_ERROR,
+		      "expected: %s\n", inet_ntoa(conn->end.addr));
 		return -1;
 	}
 
-	if (conn_bts->end.rtp_port != addr.sin_port &&
-	    conn_bts->end.rtcp_port != addr.sin_port) {
+	if (conn->end.rtp_port != addr.sin_port &&
+	    conn->end.rtcp_port != addr.sin_port) {
 		LOGP(DLMGCP, LOGL_ERROR,
-			"rtp_data_bts: ata from wrong bts source port %d on 0x%x\n",
-			ntohs(addr.sin_port), ENDPOINT_NUMBER(endp));
+		     "mgcp_recv: endpoint %x: data from wrong source port: %d, ",
+		     ENDPOINT_NUMBER(endp), ntohs(addr.sin_port));
+		LOGPC(DLMGCP, LOGL_ERROR,
+		      "expected: %d for RTP or %d for RTCP\n",
+		      ntohs(conn->end.rtp_port), ntohs(conn->end.rtcp_port));
 		return -1;
 	}
 
-	LOGP(DLMGCP, LOGL_DEBUG,
-	     "rtp_data_bts: Endpoint %x data from %s %d\n",
-	     ENDPOINT_NUMBER(endp),
-	     inet_ntoa(addr.sin_addr),
-	     ntohs(addr.sin_port));
-
-	/* throw away the dummy message */
+	/* Filter out dummy message */
 	if (rc == 1 && buf[0] == MGCP_DUMMY_LOAD) {
-		LOGP(DLMGCP, LOGL_NOTICE, "Filtered dummy from bts on 0x%x\n",
-			ENDPOINT_NUMBER(endp));
+		LOGP(DLMGCP, LOGL_NOTICE,
+		     "mgcp_recv: endpoint %x: dummy message received -- discarded!\n",
+		     ENDPOINT_NUMBER(endp));
 		return 0;
 	}
 
-	/* do this before the loop handling */
-	conn_bts->end.packets_rx += 1;
-	conn_bts->end.octets_rx += rc;
+	/* Increment RX statistics */
+	conn->end.packets_rx += 1;
+	conn->end.octets_rx += rc;
 
-	forward_data(fd->fd, &conn_bts->tap_in, buf, rc);
+	/* Forward a copy of the RTP data to a debug ip/port */
+	forward_data(fd->fd, &conn->tap_in, buf, rc);
 
 	switch (endp->type) {
 	case MGCP_RTP_DEFAULT:
 		LOGP(DLMGCP, LOGL_DEBUG,
-		     "rtp_data_bts: Endpoint %x MGCP_RTP_DEFAULT\n",
+		     "mgcp_recv: endpoint %x: Endpoint type is MGCP_RTP_DEFAULT, "
+		     "using mgcp_send() to forward data directly\n",
 		     ENDPOINT_NUMBER(endp));
 		return mgcp_send(endp, proto == MGCP_PROTO_RTP,
-				 &addr, buf, rc, CONN_ID_BTS, CONN_ID_NET);
-	case MGCP_OSMUX_BSC:
-		/* OSMUX translation: BTS -> BSC */
-		return osmux_xfrm_to_osmux(MGCP_DEST_NET, buf, rc, endp);
+				 &addr, buf, rc, conn_src_id, conn_dst_id);
 	case MGCP_OSMUX_BSC_NAT:
-		break;	/* Should not happen */
+	case MGCP_OSMUX_BSC:
+		LOGP(DLMGCP, LOGL_DEBUG,
+		     "mgcp_recv: endpoint %x: Endpoint type is MGCP_OSMUX_BSC_NAT, "
+		     "using osmux_xfrm_to_osmux() to forward data through OSMUX\n",
+		     ENDPOINT_NUMBER(endp));
+		return osmux_xfrm_to_osmux(conn_dst_id, buf, rc, endp);
 	}
 
-	LOGP(DLMGCP, LOGL_ERROR, "Bad MGCP type %u on endpoint %u\n",
-	     endp->type, ENDPOINT_NUMBER(endp));
+	/* If the data has not been handled/forwarded until here, it will
+	 * be discarded, this should not happen, normally the MGCP type
+	 * should be properly set */
+	LOGP(DLMGCP, LOGL_ERROR,
+	     "mgcp_recv: endpoint %x: Bad MGCP type -- data discarded!\n",
+	     endp->type);
 	return 0;
+}
+
+/* Receive from NET and send to BTS */
+static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
+{
+	return mgcp_recv(fd, CONN_ID_NET, CONN_ID_BTS);
+}
+
+/* Receive from BTS and send to NET */
+static int rtp_data_bts(struct osmo_fd *fd, unsigned int what)
+{
+	return mgcp_recv(fd, CONN_ID_BTS, CONN_ID_NET);
 }
 
 int mgcp_create_bind(const char *source_addr, struct osmo_fd *fd, int port)
