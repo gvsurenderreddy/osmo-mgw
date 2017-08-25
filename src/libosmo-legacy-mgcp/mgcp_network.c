@@ -38,6 +38,7 @@
 
 #include <osmocom/legacy_mgcp/mgcp.h>
 #include <osmocom/legacy_mgcp/mgcp_internal.h>
+#include <osmocom/legacy_mgcp/mgcp_stat.h>
 
 #include <osmocom/legacy_mgcp/osmux.h>
 
@@ -649,6 +650,10 @@ int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
 
 			if (rc <= 0)
 				return rc;
+
+			conn_dst->end.packets_tx += 1;
+			conn_dst->end.octets_tx += rc;
+
 			nbytes += rc;
 			len = cont;
 		} while (len > 0);
@@ -662,9 +667,14 @@ int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
 		     ntohs(rtp_end->rtp_port), ntohs(rtp_end->rtcp_port)
 		    );
 
-		return mgcp_udp_send(rtp_end->rtcp.fd,
-				     &rtp_end->addr,
-				     rtp_end->rtcp_port, buf, rc);
+	        rc = mgcp_udp_send(rtp_end->rtcp.fd,
+				   &rtp_end->addr,
+				   rtp_end->rtcp_port, buf, rc);
+
+		conn_dst->end.packets_tx += 1;
+		conn_dst->end.octets_tx += rc;
+
+		return rc;
 	}
 
 	return 0;
@@ -762,8 +772,8 @@ static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
 	}
 
 	proto = fd == &conn_net->end.rtp ? MGCP_PROTO_RTP : MGCP_PROTO_RTCP;
-	conn_net->end.packets += 1;
-	conn_net->end.octets += rc;
+	conn_net->end.packets_rx += 1;
+	conn_net->end.octets_rx += rc;
 
 	forward_data(fd->fd, &conn_net->tap_in, buf, rc);
 
@@ -867,8 +877,8 @@ static int rtp_data_bts(struct osmo_fd *fd, unsigned int what)
 	}
 
 	/* do this before the loop handling */
-	conn_bts->end.packets += 1;
-	conn_bts->end.octets += rc;
+	conn_bts->end.packets_rx += 1;
+	conn_bts->end.octets_rx += rc;
 
 	forward_data(fd->fd, &conn_bts->tap_in, buf, rc);
 
@@ -1044,36 +1054,3 @@ int mgcp_free_rtp_port(struct mgcp_rtp_end *end)
 	return 0;
 }
 
-void mgcp_state_calc_loss(struct mgcp_rtp_state *state,
-			struct mgcp_rtp_end *end, uint32_t *expected,
-			int *loss)
-{
-	*expected = state->stats_cycles + state->stats_max_seq;
-	*expected = *expected - state->stats_base_seq + 1;
-
-	if (!state->stats_initialized) {
-		*expected = 0;
-		*loss = 0;
-		return;
-	}
-
-	/*
-	 * Make sure the sign is correct and use the biggest
-	 * positive/negative number that fits.
-	 */
-	*loss = *expected - end->packets;
-	if (*expected < end->packets) {
-		if (*loss > 0)
-			*loss = INT_MIN;
-	} else {
-		if (*loss < 0)
-			*loss = INT_MAX;
-	}
-}
-
-uint32_t mgcp_state_calc_jitter(struct mgcp_rtp_state *state)
-{
-	if (!state->stats_initialized)
-		return 0;
-	return state->stats_jitter >> 4;
-}

@@ -22,6 +22,7 @@
 #include <osmocom/legacy_mgcp/mgcp.h>
 #include <osmocom/legacy_mgcp/vty.h>
 #include <osmocom/legacy_mgcp/mgcp_internal.h>
+#include <osmocom/legacy_mgcp/mgcp_stat.h>
 
 #include <osmocom/core/application.h>
 #include <osmocom/core/talloc.h>
@@ -269,7 +270,7 @@ static void test_strline(void)
 
 #define DLCX_RET "250 7 OK\r\n"			\
 		 "P: PS=0, OS=0, PR=0, OR=0, PL=0, JI=0\r\n" \
-		 "X-Osmo-CP: EC TIS=0, TOS=0, TIR=0, TOR=0\r\n"
+		 "X-Osmo-CP: EC TI=0, TO=0\r\n"
 
 #define RQNT	 "RQNT 186908780 1@mgw MGCP 1.0\r\n"	\
 		 "X: B244F267488\r\n"			\
@@ -767,8 +768,8 @@ static void test_packet_loss_calc(void)
 		state.stats_max_seq = pl_test_dat[i].max_seq;
 		state.stats_cycles = pl_test_dat[i].cycles;
 
-		rtp.packets = pl_test_dat[i].packets;
-		mgcp_state_calc_loss(&state, &rtp, &expected, &loss);
+		rtp.packets_rx = pl_test_dat[i].packets;
+		calc_loss(&state, &rtp, &expected, &loss);
 
 		if (loss != pl_test_dat[i].loss || expected != pl_test_dat[i].expected) {
 			printf("FAIL: Wrong exp/loss at idx(%d) Loss(%d vs. %d) Exp(%u vs. %u)\n",
@@ -776,6 +777,34 @@ static void test_packet_loss_calc(void)
 				expected, pl_test_dat[i].expected);
 		}
 	}
+}
+
+int mgcp_parse_stats(struct msgb *msg, uint32_t *ps, uint32_t *os,
+		uint32_t *pr, uint32_t *_or, int *loss, uint32_t *jitter)
+{
+	char *line, *save;
+	int rc;
+
+	/* initialize with bad values */
+	*ps = *os = *pr = *_or = *jitter = UINT_MAX;
+	*loss = INT_MAX;
+
+
+	line = strtok_r((char *) msg->l2h, "\r\n", &save);
+	if (!line)
+		return -1;
+
+	/* this can only parse the message that is created above... */
+	for_each_non_empty_line(line, save) {
+		switch (line[0]) {
+		case 'P':
+			rc = sscanf(line, "P: PS=%u, OS=%u, PR=%u, OR=%u, PL=%d, JI=%u",
+					ps, os, pr, _or, loss, jitter);
+			return rc == 6 ? 0 : -1;
+		}
+	}
+
+	return -1;
 }
 
 static void test_mgcp_stats(void)
@@ -989,7 +1018,7 @@ static void test_packet_error_detection(int patch_ssrc, int patch_ts)
 		       state.out_stream.err_ts_counter - last_out_ts_err_cnt);
 
 		printf("Stats: Jitter = %u, Transit = %d\n",
-		       mgcp_state_calc_jitter(&state), state.stats_transit);
+		       calc_jitter(&state), state.stats_transit);
 
 		last_in_ts_err_cnt = state.in_stream.err_ts_counter;
 		last_out_ts_err_cnt = state.out_stream.err_ts_counter;
