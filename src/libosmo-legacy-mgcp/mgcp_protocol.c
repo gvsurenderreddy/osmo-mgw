@@ -35,11 +35,7 @@
 
 #include <osmocom/legacy_mgcp/mgcp.h>
 #include <osmocom/legacy_mgcp/mgcp_internal.h>
-
-#define for_each_non_empty_line(line, save)			\
-	for (line = strtok_r(NULL, "\r\n", &save); line;\
-	     line = strtok_r(NULL, "\r\n", &save))
-
+#include <osmocom/legacy_mgcp/mgcp_stat.h>
 
 static void mgcp_rtp_end_reset(struct mgcp_rtp_end *end);
 
@@ -1155,7 +1151,7 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 	}
 
 	/* save the statistics of the current call */
-	mgcp_format_stats(endp, stats, sizeof(stats));
+	mgcp_format_stats(stats, sizeof(stats), conn_net->conn);
 
 	mgcp_release_endp(endp);
 	if (p->cfg->change_cb)
@@ -1353,8 +1349,10 @@ static void mgcp_rtp_end_reset(struct mgcp_rtp_end *end)
 		end->local_port = 0;
 	}
 
-	end->packets = 0;
-	end->octets = 0;
+	end->packets_rx = 0;
+	end->octets_rx = 0;
+	end->packets_tx = 0;
+	end->octets_tx = 0;
 	end->dropped_packets = 0;
 	memset(&end->addr, 0, sizeof(end->addr));
 	end->rtp_port = end->rtcp_port = 0;
@@ -1528,81 +1526,3 @@ static int setup_rtp_processing(struct mgcp_endpoint *endp)
 	return rc;
 }
 
-void mgcp_format_stats(struct mgcp_endpoint *endp, char *msg, size_t size)
-{
-	uint32_t expected, jitter;
-	int ploss;
-	int nchars;
-	struct mgcp_conn_rtp *conn_net = NULL;
-	struct mgcp_conn_rtp *conn_bts = NULL;
-
-	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_bts || !conn_net)
-		return;
-
-	mgcp_state_calc_loss(&conn_net->state, &conn_net->end,
-				&expected, &ploss);
-	jitter = mgcp_state_calc_jitter(&conn_net->state);
-
-	nchars = snprintf(msg, size,
-			  "\r\nP: PS=%u, OS=%u, PR=%u, OR=%u, PL=%d, JI=%u",
-			  conn_bts->end.packets, conn_bts->end.octets,
-			  conn_net->end.packets, conn_net->end.octets,
-			  ploss, jitter);
-	if (nchars < 0 || nchars >= size)
-		goto truncate;
-
-	msg += nchars;
-	size -= nchars;
-
-	/* Error Counter */
-	nchars = snprintf(msg, size,
-			  "\r\nX-Osmo-CP: EC TIS=%u, TOS=%u, TIR=%u, TOR=%u",
-			  conn_net->state.in_stream.err_ts_counter,
-			  conn_net->state.out_stream.err_ts_counter,
-			  conn_bts->state.in_stream.err_ts_counter,
-			  conn_bts->state.out_stream.err_ts_counter);
-	if (nchars < 0 || nchars >= size)
-		goto truncate;
-
-	msg += nchars;
-	size -= nchars;
-
-	if (conn_net->osmux.state == OSMUX_STATE_ENABLED) {
-		snprintf(msg, size,
-			 "\r\nX-Osmux-ST: CR=%u, BR=%u",
-			 conn_net->osmux.stats.chunks,
-			 conn_net->osmux.stats.octets);
-	}
-truncate:
-	msg[size - 1] = '\0';
-}
-
-int mgcp_parse_stats(struct msgb *msg, uint32_t *ps, uint32_t *os,
-		uint32_t *pr, uint32_t *_or, int *loss, uint32_t *jitter)
-{
-	char *line, *save;
-	int rc;
-
-	/* initialize with bad values */
-	*ps = *os = *pr = *_or = *jitter = UINT_MAX;
-	*loss = INT_MAX;
-
-
-	line = strtok_r((char *) msg->l2h, "\r\n", &save);
-	if (!line)
-		return -1;
-
-	/* this can only parse the message that is created above... */
-	for_each_non_empty_line(line, save) {
-		switch (line[0]) {
-		case 'P':
-			rc = sscanf(line, "P: PS=%u, OS=%u, PR=%u, OR=%u, PL=%d, JI=%u",
-					ps, os, pr, _or, loss, jitter);
-			return rc == 6 ? 0 : -1;
-		}
-	}
-
-	return -1;
-}

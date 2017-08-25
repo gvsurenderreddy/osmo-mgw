@@ -38,6 +38,10 @@ struct mgcp_conn *mgcp_conn_alloc(void *ctx, struct llist_head *conns,
 	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL);
 	OSMO_ASSERT(strlen(name) < sizeof(conn->name));
 
+	/* Do not allow more then two connections */
+	if (llist_count(conns) >= 2)
+		return NULL;
+
 	/* Prevent duplicate connection IDs */
 	if (mgcp_conn_get(conns, id))
 		return NULL;
@@ -154,13 +158,14 @@ char *mgcp_conn_dump(struct mgcp_conn *conn)
 	case MGCP_CONN_TYPE_RTP:
 		/* Dump RTP connection */
 		snprintf(str, sizeof(str), "(name: %s, type:rtp, id:%u, addr:%s, "
-			 "rtp_port:%u rtcp_port:%u, packets:%u)",
+			 "rtp_port:%u rtcp_port:%u, rx:%u, tx:%u)",
 			 conn->name,
 			 conn->id,
 			 inet_ntoa(conn->u.rtp.end.addr),
 			 ntohs(conn->u.rtp.end.rtp_port),
 			 ntohs(conn->u.rtp.end.rtcp_port),
-			 conn->u.rtp.end.packets);
+			 conn->u.rtp.end.packets_rx,
+			 conn->u.rtp.end.packets_tx);
 		break;
 
 	default:

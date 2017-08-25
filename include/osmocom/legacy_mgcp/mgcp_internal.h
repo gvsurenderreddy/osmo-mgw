@@ -85,8 +85,10 @@ struct mgcp_rtp_codec {
 
 struct mgcp_rtp_end {
 	/* statistics */
-	unsigned int packets;
-	unsigned int octets;
+	unsigned int packets_rx;
+	unsigned int octets_rx;
+	unsigned int packets_tx;
+	unsigned int octets_tx;
 	unsigned int dropped_packets;
 	struct in_addr addr;
 
@@ -230,6 +232,10 @@ struct mgcp_endpoint {
 	for (line = strline_r(NULL, &save); line;\
 	     line = strline_r(NULL, &save))
 
+#define for_each_non_empty_line(line, save)			\
+	for (line = strtok_r(NULL, "\r\n", &save); line;\
+	     line = strtok_r(NULL, "\r\n", &save))
+
 /* TODO: REPLACED, REMOVE */
 static inline char *strline_r(char *str, char **saveptr)
 {
@@ -296,10 +302,6 @@ void mgcp_rtp_end_config(struct mgcp_endpoint *endp, int expect_ssrc_change,
 			 struct mgcp_rtp_end *rtp);
 uint32_t mgcp_rtp_packet_duration(struct mgcp_endpoint *endp,
 				  struct mgcp_rtp_end *rtp);
-
-void mgcp_state_calc_loss(struct mgcp_rtp_state *s, struct mgcp_rtp_end *,
-			uint32_t *expected, int *loss);
-uint32_t mgcp_state_calc_jitter(struct mgcp_rtp_state *);
 
 /* payload processing default functions */
 int mgcp_rtp_processing_default(struct mgcp_endpoint *endp, struct mgcp_rtp_end *dst_end,
