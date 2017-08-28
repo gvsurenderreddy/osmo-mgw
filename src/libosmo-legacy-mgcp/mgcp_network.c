@@ -100,6 +100,12 @@ int mgcp_send_dummy(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn)
 	OSMO_ASSERT(endp);
 	OSMO_ASSERT(conn);
 
+	LOGP(DLMGCP, LOGL_DEBUG,
+	     "mgcp_send_dummy: endpoint:%x sending dummy packet...\n",
+	     ENDPOINT_NUMBER(endp));
+	LOGP(DLMGCP, LOGL_DEBUG, "mgcp_send_dummy: endpoint:%x conn:%s\n",
+	     ENDPOINT_NUMBER(endp), mgcp_conn_dump(conn->conn));
+
 	rc = mgcp_udp_send(conn->end.rtp.fd, &conn->end.addr,
 			   conn->end.rtp_port, buf, 1);
 
@@ -118,10 +124,8 @@ int mgcp_send_dummy(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn)
 
 failed:
 	LOGP(DLMGCP, LOGL_ERROR,
-		"Failed to send dummy %s packet: %s on: 0x%x to %s:%d\n",
-		was_rtcp ? "RTCP" : "RTP",
-		strerror(errno), ENDPOINT_NUMBER(endp), inet_ntoa(conn->end.addr),
-		was_rtcp ? conn->end.rtcp_port : conn->end.rtp_port);
+	     "mgcp_send_dummy: endpoint:%x Failed to send dummy %s packet.\n",
+	     ENDPOINT_NUMBER(endp), was_rtcp ? "RTCP" : "RTP");
 
 	return -1;
 }
