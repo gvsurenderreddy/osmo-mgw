@@ -596,7 +596,7 @@ int osmux_send_dummy(struct mgcp_endpoint *endp)
 	if (memcmp(&conn_net->end.addr, &addr_unset, sizeof(addr_unset)) == 0)
 		return 0;
 
-	if (endp->osmux.state == OSMUX_STATE_ACTIVATING) {
+	if (conn_net->osmux.state == OSMUX_STATE_ACTIVATING) {
 		if (osmux_enable_endpoint(endp, &conn_net->end.addr,
 					  htons(endp->cfg->osmux_port)) < 0) {
 			LOGP(DLMGCP, LOGL_ERROR,
