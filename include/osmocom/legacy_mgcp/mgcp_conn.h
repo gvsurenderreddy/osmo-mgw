@@ -32,6 +32,9 @@ struct mgcp_conn *mgcp_conn_alloc(void *ctx, struct llist_head *conns,
 				  char *name);
 struct mgcp_conn *mgcp_conn_get(struct llist_head *conns, uint32_t id);
 struct mgcp_conn_rtp *mgcp_conn_get_rtp(struct llist_head *conns, uint32_t id);
+struct mgcp_conn_rtp *mgcp_conn_get_rtp_by_fd(struct llist_head *conns,
+					      struct osmo_fd *fd);
+
 void mgcp_conn_free(struct llist_head *conns, uint32_t id);
 void mgcp_conn_free_all(struct llist_head *conns);
 char *mgcp_conn_dump(struct mgcp_conn *conn);

@@ -23,6 +23,51 @@
 
 #include <osmocom/legacy_mgcp/mgcp_conn.h>
 
+/* Reset codec state and free memory */
+static void mgcp_rtp_codec_reset(struct mgcp_rtp_codec *codec)
+{
+	codec->payload_type = -1;
+	codec->subtype_name = NULL;
+	codec->audio_name = NULL;
+	codec->frame_duration_num = DEFAULT_RTP_AUDIO_FRAME_DUR_NUM;
+	codec->frame_duration_den = DEFAULT_RTP_AUDIO_FRAME_DUR_DEN;
+	codec->rate               = DEFAULT_RTP_AUDIO_DEFAULT_RATE;
+	codec->channels           = DEFAULT_RTP_AUDIO_DEFAULT_CHANNELS;
+
+	/* see also mgcp_sdp.c, mgcp_set_audio_info() */
+	talloc_free(codec->subtype_name);
+	talloc_free(codec->audio_name);
+}
+
+
+/* Reset states, free memory, set defaults and reset codec state */
+static void mgcp_rtp_end_reset(struct mgcp_rtp_end *end)
+{
+	mgcp_free_rtp_port(end);
+	end->local_port = 0;
+
+	end->packets_rx = 0;
+	end->octets_rx = 0;
+	end->packets_tx = 0;
+	end->octets_tx = 0;
+	end->dropped_packets = 0;
+	end->rtp_port =end->rtcp_port = 0;
+	talloc_free(end->fmtp_extra);
+	end->fmtp_extra = NULL;
+	end->rtp_process_data = NULL;
+
+	/* See also mgcp_transcode.c, mgcp_transcoding_setup() */
+	talloc_free(end->rtp_process_data);
+	
+	/* Set default values */
+	end->frames_per_packet  = 0; /* unknown */
+	end->packet_duration_ms = DEFAULT_RTP_AUDIO_PACKET_DURATION_MS;
+	end->output_enabled	= 0;
+
+	mgcp_rtp_codec_reset(&end->codec);
+	mgcp_rtp_codec_reset(&end->alt_codec);
+}
+
 /*! \brief allocate a new connection list entry
  *  \param[in] ctx talloc context
  *  \param[in] conns list with connections
@@ -54,6 +99,21 @@ struct mgcp_conn *mgcp_conn_alloc(void *ctx, struct llist_head *conns,
 	conn->id = id;
 	conn->u.rtp.conn = conn;
 	strcpy(conn->name, name);
+
+	switch(type) {
+	case MGCP_CONN_TYPE_RTP:
+		conn->u.rtp.osmux.allocated_cid = -1;
+		conn->u.rtp.end.rtp.fd = -1;
+		conn->u.rtp.end.rtcp.fd = -1;
+		mgcp_rtp_end_reset(&conn->u.rtp.end);
+		break;
+	default:
+		/* NOTE: This should never be called with an
+		 * invalid type, its up to the programmer
+		 * to ensure propery types */
+		OSMO_ASSERT(false)
+	}
+
 	llist_add(&conn->entry, conns);
 
 	return conn;
@@ -78,7 +138,7 @@ struct mgcp_conn *mgcp_conn_get(struct llist_head *conns, uint32_t id)
 	return NULL;
 }
 
-/*! \brief find a connection by its ID and type
+/*! \brief find an RTP connection by its ID
  *  \param[in] conns list with connections
  *  \param[in] id identification number of the connection
  *  \returns pointer to allocated connection, NULL if not found */
@@ -105,6 +165,30 @@ struct mgcp_conn_rtp *mgcp_conn_get_rtp(struct llist_head *conns, uint32_t id)
 	return NULL;
 }
 
+/*! \brief find an RTP connection by its file descriptor
+ *  \param[in] conns list with connections
+ *  \param[in] fd file descriptor to look up
+ *  \returns pointer to allocated connection, NULL if not found */
+struct mgcp_conn_rtp *mgcp_conn_get_rtp_by_fd(struct llist_head *conns,
+					      struct osmo_fd *fd)
+{
+	OSMO_ASSERT(conns);
+	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL);
+	
+	struct mgcp_conn *conn;
+	struct mgcp_conn_rtp *conn_rtp;
+
+	llist_for_each_entry(conn, conns, entry) {
+		if (conn->type == MGCP_CONN_TYPE_RTP) {
+			conn_rtp = &conn->u.rtp;
+			if (&conn_rtp->end.rtp == fd)
+				return conn_rtp;
+		}
+	}
+
+	return NULL;
+}
+
 /*! \brief free a connection by its ID
  *  \param[in] conns list with connections
  *  \param[in] id identification number of the connection */
@@ -119,6 +203,20 @@ void mgcp_conn_free(struct llist_head *conns, uint32_t id)
 	if (!conn)
 		return;
 
+	switch(conn->type) {
+	case MGCP_CONN_TYPE_RTP:
+		osmux_disable_conn(&conn->u.rtp);
+		osmux_release_cid(&conn->u.rtp);
+		mgcp_rtp_end_reset(&conn->u.rtp.end);
+		break;
+	default:
+		/* NOTE: This should never be called with an
+		 * invalid type, its up to the programmer
+		 * to ensure propery types */
+		OSMO_ASSERT(false)
+	}
+
+	
 	llist_del(&conn->entry);
 	talloc_free(conn);
 }
@@ -135,8 +233,7 @@ void mgcp_conn_free_all(struct llist_head *conns)
 
 	/* Drop all items in the list */
 	llist_for_each_entry_safe(conn, conn_tmp, conns, entry) {
-		llist_del(&conn->entry);
-		talloc_free(conn);
+		mgcp_conn_free(conns, conn->id);
 	}
 
 	return;
@@ -157,15 +254,13 @@ char *mgcp_conn_dump(struct mgcp_conn *conn)
 	switch (conn->type) {
 	case MGCP_CONN_TYPE_RTP:
 		/* Dump RTP connection */
-		snprintf(str, sizeof(str), "(name: %s, type:rtp, id:%u, addr:%s, "
-			 "rtp_port:%u rtcp_port:%u, rx:%u, tx:%u)",
+		snprintf(str, sizeof(str), "(%s/rtp, id:%u, ip:%s, "
+			 "rtp:%u rtcp:%u)",
 			 conn->name,
 			 conn->id,
 			 inet_ntoa(conn->u.rtp.end.addr),
 			 ntohs(conn->u.rtp.end.rtp_port),
-			 ntohs(conn->u.rtp.end.rtcp_port),
-			 conn->u.rtp.end.packets_rx,
-			 conn->u.rtp.end.packets_tx);
+			 ntohs(conn->u.rtp.end.rtcp_port));
 		break;
 
 	default:
