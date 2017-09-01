@@ -39,7 +39,8 @@ struct osmux_handle {
 
 static void *osmux;
 
-static void osmux_deliver(struct msgb *batch_msg, void *data)
+/* Deliver OSMUX batch to the remote end */
+static void osmux_deliver_cb(struct msgb *batch_msg, void *data)
 {
 	struct osmux_handle *handle = data;
 	struct sockaddr_in out = {
@@ -53,12 +54,12 @@ static void osmux_deliver(struct msgb *batch_msg, void *data)
 	msgb_free(batch_msg);
 }
 
+/* Lookup existing OSMUX handle for specified destination address. */
 static struct osmux_handle *
 osmux_handle_find_get(struct in_addr *addr, int rem_port)
 {
 	struct osmux_handle *h;
 
-	/* Lookup for existing OSMUX handle for this destination address. */
 	llist_for_each_entry(h, &osmux_handle_list, head) {
 		if (memcmp(&h->rem_addr, addr, sizeof(struct in_addr)) == 0 &&
 		    h->rem_port == rem_port) {
@@ -73,11 +74,11 @@ osmux_handle_find_get(struct in_addr *addr, int rem_port)
 	return NULL;
 }
 
+/* Put down no longer needed OSMUX handle */
 static void osmux_handle_put(struct osmux_in_handle *in)
 {
 	struct osmux_handle *h;
 
-	/* Lookup for existing OSMUX handle for this destination address. */
 	llist_for_each_entry(h, &osmux_handle_list, head) {
 		if (h->in == in) {
 			if (--h->refcnt == 0) {
@@ -102,6 +103,7 @@ static void osmux_handle_put(struct osmux_in_handle *in)
 	LOGP(DLMGCP, LOGL_ERROR, "cannot find Osmux input handle %p\n", in);
 }
 
+/* Allocate free OSMUX handle */
 static struct osmux_handle *
 osmux_handle_alloc(struct mgcp_config *cfg, struct in_addr *addr, int rem_port)
 {
@@ -120,11 +122,14 @@ osmux_handle_alloc(struct mgcp_config *cfg, struct in_addr *addr, int rem_port)
 		return NULL;
 	}
 
-	h->in->osmux_seq = 0; /* sequence number to start OSmux message from */
+	/* sequence number to start OSMUX message from */
+	h->in->osmux_seq = 0; 
+
 	h->in->batch_factor = cfg->osmux_batch;
+
 	/* If batch size is zero, the library defaults to 1470 bytes. */
 	h->in->batch_size = cfg->osmux_batch_size;
-	h->in->deliver = osmux_deliver;
+	h->in->deliver = osmux_deliver_cb;
 	osmux_xfrm_input_init(h->in);
 	h->in->data = h;
 
@@ -136,6 +141,8 @@ osmux_handle_alloc(struct mgcp_config *cfg, struct in_addr *addr, int rem_port)
 	return h;
 }
 
+/* Lookup existing handle for a specified address, if the handle can not be
+ * foud a the function will automatically allocate one */
 static struct osmux_in_handle *
 osmux_handle_lookup(struct mgcp_config *cfg, struct in_addr *addr, int rem_port)
 {
@@ -152,30 +159,31 @@ osmux_handle_lookup(struct mgcp_config *cfg, struct in_addr *addr, int rem_port)
 	return h->in;
 }
 
-int osmux_xfrm_to_osmux(int type, char *buf, int rc, struct mgcp_endpoint *endp)
+/*! \brief send RTP packet through OSMUX connection
+ *  \param[in] buf rtp data
+ *  \param[in] buf_len length of rtp data
+ *  \param[in] conn associated RTP connection
+ *  \returns 0 on success, -1 on ERROR */
+int osmux_xfrm_to_osmux(char *buf, int buf_len, struct mgcp_conn_rtp *conn)
 {
 	int ret;
 	struct msgb *msg;
-	struct mgcp_conn_rtp *conn_net = NULL;
-
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_net)
-		return 0;
 
 	msg = msgb_alloc(4096, "RTP");
 	if (!msg)
-		return 0;
+		return -1;
 
-	memcpy(msg->data, buf, rc);
-	msgb_put(msg, rc);
+	memcpy(msg->data, buf, buf_len);
+	msgb_put(msg, buf_len);
 
-	while ((ret = osmux_xfrm_input(conn_net->osmux.in, msg, conn_net->osmux.cid)) > 0) {
+	while ((ret = osmux_xfrm_input(conn->osmux.in, msg, conn->osmux.cid)) > 0) {
 		/* batch full, build and deliver it */
-		osmux_xfrm_input_deliver(conn_net->osmux.in);
+		osmux_xfrm_input_deliver(conn->osmux.in);
 	}
 	return 0;
 }
 
+/* Lookup the endpoint that corresponds to the specified address (port) */
 static struct mgcp_endpoint *
 endpoint_lookup(struct mgcp_config *cfg, int cid,
 		struct in_addr *from_addr, int type)
@@ -185,21 +193,24 @@ endpoint_lookup(struct mgcp_config *cfg, int cid,
 	struct mgcp_conn_rtp *conn_net = NULL;
 	struct mgcp_conn_rtp *conn_bts = NULL;
 
-	/* Lookup for the endpoint that corresponds to this port */
 	for (i=0; i<cfg->trunk.number_endpoints; i++) {
 		struct in_addr *this;
 
 		tmp = &cfg->trunk.endpoints[i];
 
+#if 0
 		if (!tmp->allocated)
 			continue;
-
+#endif
+		
 		switch(type) {
 		case MGCP_DEST_NET:
+			/* FIXME: Get rid of CONN_ID_XXX! */
 			conn_net = mgcp_conn_get_rtp(&tmp->conns, CONN_ID_NET);
 			this = &conn_net->end.addr;
 			break;
 		case MGCP_DEST_BTS:
+			/* FIXME: Get rid of CONN_ID_XXX! */
 			conn_bts = mgcp_conn_get_rtp(&tmp->conns, CONN_ID_BTS);
 			this = &conn_bts->end.addr;
 			break;
@@ -209,6 +220,7 @@ endpoint_lookup(struct mgcp_config *cfg, int cid,
 			return NULL;
 		}
 
+		/* FIXME: Get rid of CONN_ID_XXX! */
 		conn_net = mgcp_conn_get_rtp(&tmp->conns, CONN_ID_NET);
 		if (conn_net->osmux.cid == cid && this->s_addr == from_addr->s_addr)
 			return tmp;
@@ -225,6 +237,7 @@ static void scheduled_tx_net_cb(struct msgb *msg, void *data)
 	struct mgcp_conn_rtp *conn_net = NULL;
 	struct mgcp_conn_rtp *conn_bts = NULL;
 
+	/* FIXME: Get rid of CONN_ID_XXX! */
 	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
 	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
 	if (!conn_bts || !conn_net)
@@ -239,8 +252,9 @@ static void scheduled_tx_net_cb(struct msgb *msg, void *data)
 	conn_bts->end.packets_tx++;
 
 	/* Send RTP data to NET */
+	/* FIXME: Get rid of conn_bts and conn_net! */
 	mgcp_send(endp, 1, &addr, (char *)msg->data, msg->len,
-		  CONN_ID_BTS, CONN_ID_NET);
+		  conn_bts, conn_net);
 	msgb_free(msg);
 }
 
@@ -250,6 +264,7 @@ static void scheduled_tx_bts_cb(struct msgb *msg, void *data)
 	struct mgcp_conn_rtp *conn_net = NULL;
 	struct mgcp_conn_rtp *conn_bts = NULL;
 
+	/* FIXME: Get rid of CONN_ID_XXX! */
 	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
 	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
 	if (!conn_bts || !conn_net)
@@ -264,8 +279,9 @@ static void scheduled_tx_bts_cb(struct msgb *msg, void *data)
 	conn_net->end.packets_tx++;
 
 	/* Send RTP data to BTS */
+	/* FIXME: Get rid of conn_bts and conn_net! */
 	mgcp_send(endp, 1, &addr, (char *)msg->data, msg->len,
-		  CONN_ID_NET, CONN_ID_BTS);
+		  conn_net, conn_bts);
 	msgb_free(msg);
 }
 
@@ -320,6 +336,7 @@ int osmux_read_from_bsc_nat_cb(struct osmo_fd *ofd, unsigned int what)
 		endp = endpoint_lookup(cfg, osmuxh->circuit_id,
 				       &addr.sin_addr, MGCP_DEST_NET);
 
+		/* FIXME: Get rid of CONN_ID_XXX! */
 		conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
 		if (!conn_net)
 			goto out;
@@ -382,7 +399,7 @@ static int osmux_handle_dummy(struct mgcp_config *cfg, struct sockaddr_in *addr,
 	if (conn_net->osmux.state == OSMUX_STATE_ENABLED)
 		goto out;
 
-	if (osmux_enable_endpoint(endp, &addr->sin_addr, addr->sin_port) < 0 ) {
+	if (osmux_enable_conn(endp, conn_net, &addr->sin_addr, addr->sin_port) < 0 ) {
 		LOGP(DLMGCP, LOGL_ERROR,
 		     "Could not enable osmux in endpoint %d\n",
 		     ENDPOINT_NUMBER(endp));
@@ -423,6 +440,7 @@ int osmux_read_from_bsc_cb(struct osmo_fd *ofd, unsigned int what)
 		endp = endpoint_lookup(cfg, osmuxh->circuit_id,
 				       &addr.sin_addr, MGCP_DEST_BTS);
 
+		/* FIXME: Get rid of CONN_ID_XXX! */		
 		conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
 		if (!conn_net)
 			goto out;
@@ -480,43 +498,47 @@ int osmux_init(int role, struct mgcp_config *cfg)
 	return 0;
 }
 
-int osmux_enable_endpoint(struct mgcp_endpoint *endp, struct in_addr *addr, uint16_t port)
+/*! \brief enable OSXMUX circuit for a specified connection
+ *  \param[in] endp mgcp endpoint (configuration)
+ *  \param[in] conn connection to disable
+ *  \param[in] addr IP address of remote OSMUX endpoint
+ *  \param[in] port portnumber of the remote OSMUX endpoint
+ *  \returns 0 on success, -1 on ERROR */
+int osmux_enable_conn(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn,
+		      struct in_addr *addr, uint16_t port)
 {
-	/* If osmux is enabled, initialize the output handler. This handler is
-	 * used to reconstruct the RTP flow from osmux. The RTP SSRC is
-	 * allocated based on the circuit ID (conn_net->osmux.cid), which is unique
-	 * in the local scope to the BSC/BSC-NAT. We use it to divide the RTP
-	 * SSRC space (2^32) by the 256 possible circuit IDs, then randomly
-	 * select one value from that window. Thus, we have no chance to have
-	 * overlapping RTP SSRC traveling to the BTSes behind the BSC,
-	 * similarly, for flows traveling to the MSC.
+	/*! If osmux is enabled, initialize the output handler. This handler is
+	 *  used to reconstruct the RTP flow from osmux. The RTP SSRC is
+	 *  allocated based on the circuit ID (conn_net->osmux.cid), which is unique
+	 *  in the local scope to the BSC/BSC-NAT. We use it to divide the RTP
+	 *  SSRC space (2^32) by the 256 possible circuit IDs, then randomly
+	 *  select one value from that window. Thus, we have no chance to have
+	 *  overlapping RTP SSRC traveling to the BTSes behind the BSC,
+	 *  similarly, for flows traveling to the MSC.
 	 */
 	static const uint32_t rtp_ssrc_winlen = UINT32_MAX / 256;
-	struct mgcp_conn_rtp *conn_net = NULL;
+	uint16_t osmux_dummy = endp->cfg->osmux_dummy;
 
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_net)
-		return -1;
-
-	if (conn_net->osmux.state == OSMUX_STATE_DISABLED) {
-		LOGP(DLMGCP, LOGL_ERROR, "Endpoint %u didn't request Osmux\n",
-		     ENDPOINT_NUMBER(endp));
+	/* Check if osmux is enabled for the specified connection */
+	if (conn->osmux.state == OSMUX_STATE_DISABLED) {
+		LOGP(DLMGCP, LOGL_ERROR, "OSMUX not enabled for conn:%s\n",
+		     mgcp_conn_dump(conn->conn));
 		return -1;
 	}
 
-	osmux_xfrm_output_init(&conn_net->osmux.out,
-			       (conn_net->osmux.cid * rtp_ssrc_winlen) +
+	osmux_xfrm_output_init(&conn->osmux.out,
+			       (conn->osmux.cid * rtp_ssrc_winlen) +
 			       (random() % rtp_ssrc_winlen));
 
-	conn_net->osmux.in = osmux_handle_lookup(endp->cfg, addr, port);
-	if (!conn_net->osmux.in) {
-		LOGP(DLMGCP, LOGL_ERROR, "Cannot allocate input osmux handle\n");
+	conn->osmux.in = osmux_handle_lookup(endp->cfg, addr, port);
+	if (!conn->osmux.in) {
+		LOGP(DLMGCP, LOGL_ERROR, "Cannot allocate input osmux handle for conn:%s\n",
+		     mgcp_conn_dump(conn->conn));
 		return -1;
 	}
-	if (!osmux_xfrm_input_open_circuit(conn_net->osmux.in, conn_net->osmux.cid,
-					   endp->cfg->osmux_dummy)) {
-		LOGP(DLMGCP, LOGL_ERROR, "Cannot open osmux circuit %u\n",
-		     conn_net->osmux.cid);
+	if (!osmux_xfrm_input_open_circuit(conn->osmux.in, conn->osmux.cid, osmux_dummy)) {
+		LOGP(DLMGCP, LOGL_ERROR, "Cannot open osmux circuit %u for conn:%s\n",
+		     conn->osmux.cid, mgcp_conn_dump(conn->conn));
 		return -1;
 	}
 
@@ -529,96 +551,102 @@ int osmux_enable_endpoint(struct mgcp_endpoint *endp, struct in_addr *addr, uint
 			break;
 	}
 
-	conn_net->osmux.state = OSMUX_STATE_ENABLED;
+	conn->osmux.state = OSMUX_STATE_ENABLED;
 
 	return 0;
 }
 
-void osmux_disable_endpoint(struct mgcp_endpoint *endp)
+/*! \brief disable OSXMUX circuit for a specified connection
+ *  \param[in] conn connection to disable */
+void osmux_disable_conn(struct mgcp_conn_rtp *conn)
 {
-	struct mgcp_conn_rtp *conn_net = NULL;
-
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_net)
+	if (!conn)
 		return;
 
-	LOGP(DLMGCP, LOGL_INFO, "Releasing endpoint %u using Osmux CID %u\n",
-	     ENDPOINT_NUMBER(endp), conn_net->osmux.cid);
-	osmux_xfrm_input_close_circuit(conn_net->osmux.in, conn_net->osmux.cid);
-	conn_net->osmux.state = OSMUX_STATE_DISABLED;
-	conn_net->osmux.cid = -1;
-	osmux_handle_put(conn_net->osmux.in);
-}
-
-void osmux_release_cid(struct mgcp_endpoint *endp)
-{
-	struct mgcp_conn_rtp *conn_net = NULL;
-
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_net)
+	if (conn->osmux.state != OSMUX_STATE_ENABLED)
 		return;
 
-	if (conn_net->osmux.allocated_cid >= 0)
-		osmux_put_cid(conn_net->osmux.allocated_cid);
-	conn_net->osmux.allocated_cid = -1;
+	LOGP(DLMGCP, LOGL_INFO, "Releasing connection %u using Osmux CID %u\n",
+	     conn->conn->id, conn->osmux.cid);
+	osmux_xfrm_input_close_circuit(conn->osmux.in, conn->osmux.cid);
+	conn->osmux.state = OSMUX_STATE_DISABLED;
+	conn->osmux.cid = -1;
+	osmux_handle_put(conn->osmux.in);
 }
 
-void osmux_allocate_cid(struct mgcp_endpoint *endp)
+/*! \brief relase OSXMUX cid, that had been allocated to this connection
+ *  \param[in] conn connection with OSMUX cid to release */
+void osmux_release_cid(struct mgcp_conn_rtp *conn)
 {
-	struct mgcp_conn_rtp *conn_net = NULL;
-
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_net)
+	if (!conn)
 		return;
 
-	osmux_release_cid(endp);
-	conn_net->osmux.allocated_cid = osmux_get_cid();
+	if (conn->osmux.state != OSMUX_STATE_ENABLED)
+		return;	
+
+	if (conn->osmux.allocated_cid >= 0)
+		osmux_put_cid(conn->osmux.allocated_cid);
+	conn->osmux.allocated_cid = -1;
 }
 
-/* We don't need to send the dummy load for osmux so often as another endpoint
- * may have already punched the hole in the firewall. This approach is simple
- * though.
- */
-int osmux_send_dummy(struct mgcp_endpoint *endp)
+/*! \brief allocate OSXMUX cid to connection
+ *  \param[in] conn connection for which we allocate the OSMUX cid*/
+void osmux_allocate_cid(struct mgcp_conn_rtp *conn)
+{
+	osmux_release_cid(conn);
+	conn->osmux.allocated_cid = osmux_get_cid();
+}
+
+/*! \brief send RTP dummy packet to OSMUX connection port
+ *  \param[in] endp mcgp endpoint that holds the RTP connection
+ *  \param[in] conn associated RTP connection
+ *  \returns bytes sent, -1 on error */
+int osmux_send_dummy(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn)
 {
 	char buf[1 + sizeof(uint8_t)];
 	struct in_addr addr_unset = {};
-	struct mgcp_conn_rtp *conn_net = NULL;
 
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-	if (!conn_net)
-		return -1;
+	/*! The dummy packet will not be sent via the actual OSMUX connection,
+	 *  instead it is sent out of band to port where the remote OSMUX
+	 *  multplexer is listening. The goal is to ensure that the connection
+	 *  is kept open */
+	
+	/*! We don't need to send the dummy load for osmux so often as another
+	 *  endpoint may have already punched the hole in the firewall. This
+	 *  approach is simple though. */
 
 	buf[0] = MGCP_DUMMY_LOAD;
-	memcpy(&buf[1], &conn_net->osmux.cid, sizeof(conn_net->osmux.cid));
+	memcpy(&buf[1], &conn->osmux.cid, sizeof(conn->osmux.cid));
 
 	/* Wait until we have the connection information from MDCX */
-	if (memcmp(&conn_net->end.addr, &addr_unset, sizeof(addr_unset)) == 0)
+	if (memcmp(&conn->end.addr, &addr_unset, sizeof(addr_unset)) == 0)
 		return 0;
 
-	if (conn_net->osmux.state == OSMUX_STATE_ACTIVATING) {
-		if (osmux_enable_endpoint(endp, &conn_net->end.addr,
-					  htons(endp->cfg->osmux_port)) < 0) {
+	if (conn->osmux.state == OSMUX_STATE_ACTIVATING) {
+		if (osmux_enable_conn(endp, conn, &conn->end.addr,
+				      htons(endp->cfg->osmux_port)) < 0) {
 			LOGP(DLMGCP, LOGL_ERROR,
-			     "Could not activate osmux in endpoint %d\n",
-			     ENDPOINT_NUMBER(endp));
+			     "Could not activate osmux for conn:%s\n",
+			     mgcp_conn_dump(conn->conn));
 		}
 		LOGP(DLMGCP, LOGL_ERROR,
 		     "Osmux CID %u for %s:%u is now enabled\n",
-		     conn_net->osmux.cid, inet_ntoa(conn_net->end.addr),
+		     conn->osmux.cid, inet_ntoa(conn->end.addr),
 		     endp->cfg->osmux_port);
 	}
 	LOGP(DLMGCP, LOGL_DEBUG,
 	     "sending OSMUX dummy load to %s CID %u\n",
-	     inet_ntoa(conn_net->end.addr), conn_net->osmux.cid);
+	     inet_ntoa(conn->end.addr), conn->osmux.cid);
 
-	return mgcp_udp_send(osmux_fd.fd, &conn_net->end.addr,
+	return mgcp_udp_send(osmux_fd.fd, &conn->end.addr,
 			     htons(endp->cfg->osmux_port), buf, sizeof(buf));
 }
 
-/* bsc-nat allocates/releases the Osmux circuit ID */
+/*! \brief bsc-nat allocates/releases the OSMUX cids (Circuit IDs) */
 static uint8_t osmux_cid_bitmap[(OSMUX_CID_MAX + 1) / 8];
 
+/*! \brief count the number of taken OSMUX cids
+ *  \returns number of OSMUX cids in use */
 int osmux_used_cid(void)
 {
 	int i, j, used = 0;
@@ -633,6 +661,8 @@ int osmux_used_cid(void)
 	return used;
 }
 
+/*! \brief take a free OSMUX cid
+ *  \returns OSMUX cid */
 int osmux_get_cid(void)
 {
 	int i, j;
@@ -653,6 +683,8 @@ int osmux_get_cid(void)
 	return -1;
 }
 
+/*! \brief put back a no longer used OSMUX cid
+ *  \param[in] osmux_cid OSMUX cid */
 void osmux_put_cid(uint8_t osmux_cid)
 {
 	LOGP(DLMGCP, LOGL_DEBUG, "Osmux CID %u is back to the pool\n", osmux_cid);

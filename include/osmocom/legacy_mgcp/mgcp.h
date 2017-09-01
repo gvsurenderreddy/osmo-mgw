@@ -102,10 +102,12 @@ typedef int (*mgcp_processing_setup)(struct mgcp_endpoint *endp,
 				     struct mgcp_rtp_end *dst_end,
 				     struct mgcp_rtp_end *src_end);
 
+struct mgcp_conn_rtp;
 typedef void (*mgcp_get_format)(struct mgcp_endpoint *endp,
 				int *payload_type,
 				const char**subtype_name,
-				const char**fmtp_extra);
+				const char**fmtp_extra,
+				struct mgcp_conn_rtp *conn);
 
 #define PORT_ALLOC_STATIC	0
 #define PORT_ALLOC_DYNAMIC	1
@@ -253,7 +255,6 @@ int mgcp_parse_config(const char *config_file, struct mgcp_config *cfg,
 int mgcp_vty_init(void);
 int mgcp_endpoints_allocate(struct mgcp_trunk_config *cfg);
 void mgcp_release_endp(struct mgcp_endpoint *endp);
-void mgcp_initialize_endp(struct mgcp_endpoint *endp);
 void mgcp_trunk_set_keepalive(struct mgcp_trunk_config *tcfg, int interval);
 
 /*
@@ -283,8 +284,6 @@ int mgcp_send_reset_all(struct mgcp_config *cfg);
 
 
 int mgcp_create_bind(const char *source_addr, struct osmo_fd *fd, int port);
-int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
-	      char *buf, int rc, uint32_t conn_src_id, uint32_t conn_dst_id);
 int mgcp_udp_send(int fd, struct in_addr *addr, int port, char *buf, int len);
 
 #endif

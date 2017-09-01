@@ -111,14 +111,11 @@ struct mgcp_rtp_end {
 	int force_aligned_timing;
 	void *rtp_process_data;
 
-	/*
-	 * Each end has a socket...
-	 */
+	/* Each end has a separete socket for RTP and RTCP */
 	struct osmo_fd rtp;
 	struct osmo_fd rtcp;
 
 	int local_port;
-	int local_alloc;
 };
 
 struct mgcp_rtp_tap {
@@ -208,8 +205,6 @@ struct mgcp_conn {
 #include <osmocom/legacy_mgcp/mgcp_conn.h>
 
 struct mgcp_endpoint {
-	int allocated;
-	uint32_t ci;
 	char *callid;
 	struct mgcp_lco local_options;
 	int conn_mode;
@@ -280,14 +275,13 @@ struct mgcp_parse_data {
 	int found;
 };
 
+int mgcp_send(struct mgcp_endpoint *endp, int is_rtp, struct sockaddr_in *addr,
+	      char *buf, int rc, struct mgcp_conn_rtp *conn_src,
+	      struct mgcp_conn_rtp *conn_dst);
 int mgcp_send_dummy(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn);
-int mgcp_bind_bts_rtp_port(struct mgcp_endpoint *endp, int rtp_port,
-			   struct mgcp_conn_rtp *conn);
 int mgcp_bind_net_rtp_port(struct mgcp_endpoint *endp, int rtp_port,
 			   struct mgcp_conn_rtp *conn);
-int mgcp_bind_trans_bts_rtp_port(struct mgcp_endpoint *enp, int rtp_port);
-int mgcp_bind_trans_net_rtp_port(struct mgcp_endpoint *enp, int rtp_port);
-int mgcp_free_rtp_port(struct mgcp_rtp_end *end);
+void mgcp_free_rtp_port(struct mgcp_rtp_end *end);
 
 /* For transcoding we need to manage an in and an output that are connected */
 static inline int endp_back_channel(int endpoint)
@@ -313,8 +307,9 @@ int mgcp_setup_rtp_processing_default(struct mgcp_endpoint *endp,
 
 void mgcp_get_net_downlink_format_default(struct mgcp_endpoint *endp,
 					  int *payload_type,
-					  const char**subtype_name,
-					  const char**fmtp_extra);
+					  const char**audio_name,
+					  const char**fmtp_extra,
+					  struct mgcp_conn_rtp *conn);
 
 /* internal RTP Annex A counting */
 void mgcp_rtp_annex_count(struct mgcp_endpoint *endp, struct mgcp_rtp_state *state,
@@ -347,21 +342,13 @@ int mgcp_parse_sdp_data(struct mgcp_endpoint *endp, struct mgcp_rtp_end *rtp, st
 int mgcp_set_audio_info(void *ctx, struct mgcp_rtp_codec *codec,
 			int payload_type, const char *audio_name);
 
-
-/**
- * Internal network related
- */
+/*! \brief get the ip-address where the mgw application is bound on
+ *  \param[in] endp mgcp endpoint, that holds a copy of the VTY parameters
+ *  \returns pointer to a string that contains the source ip-address */
 static inline const char *mgcp_net_src_addr(struct mgcp_endpoint *endp)
 {
 	if (endp->cfg->net_ports.bind_addr)
 		return endp->cfg->net_ports.bind_addr;
-	return endp->cfg->source_addr;
-}
-
-static inline const char *mgcp_bts_src_addr(struct mgcp_endpoint *endp)
-{
-	if (endp->cfg->bts_ports.bind_addr)
-		return endp->cfg->bts_ports.bind_addr;
 	return endp->cfg->source_addr;
 }
 

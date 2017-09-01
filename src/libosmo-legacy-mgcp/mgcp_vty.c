@@ -21,9 +21,7 @@
  *
  */
 
-
 #include <osmocom/core/talloc.h>
-
 #include <osmocom/legacy_mgcp/mgcp.h>
 #include <osmocom/legacy_mgcp/mgcp_internal.h>
 #include <osmocom/legacy_mgcp/vty.h>
@@ -48,9 +46,6 @@ static struct mgcp_trunk_config *find_trunk(struct mgcp_config *cfg, int nr)
 	return trunk;
 }
 
-/*
- * vty code for mgcp below
- */
 struct cmd_node mgcp_node = {
 	MGCP_NODE,
 	"%s(config-mgcp)# ",
@@ -68,24 +63,17 @@ static int config_write_mgcp(struct vty *vty)
 	vty_out(vty, "mgcp%s", VTY_NEWLINE);
 	if (g_cfg->local_ip)
 		vty_out(vty, "  local ip %s%s", g_cfg->local_ip, VTY_NEWLINE);
-	if (g_cfg->bts_ip && strlen(g_cfg->bts_ip) != 0)
-		vty_out(vty, "  bts ip %s%s", g_cfg->bts_ip, VTY_NEWLINE);
+//	if (g_cfg->bts_ip && strlen(g_cfg->bts_ip) != 0)
+//		vty_out(vty, "  bts ip %s%s", g_cfg->bts_ip, VTY_NEWLINE);
 	vty_out(vty, "  bind ip %s%s", g_cfg->source_addr, VTY_NEWLINE);
 	vty_out(vty, "  bind port %u%s", g_cfg->source_port, VTY_NEWLINE);
 
-	if (g_cfg->bts_ports.mode == PORT_ALLOC_STATIC)
-		vty_out(vty, "  rtp bts-base %u%s", g_cfg->bts_ports.base_port, VTY_NEWLINE);
-	else
-		vty_out(vty, "  rtp bts-range %u %u%s",
-			g_cfg->bts_ports.range_start, g_cfg->bts_ports.range_end, VTY_NEWLINE);
-	if (g_cfg->bts_ports.bind_addr)
-		vty_out(vty, "  rtp bts-bind-ip %s%s", g_cfg->bts_ports.bind_addr, VTY_NEWLINE);
+//	if (g_cfg->bts_ports.bind_addr)
+//		vty_out(vty, "  rtp bts-bind-ip %s%s", g_cfg->bts_ports.bind_addr, VTY_NEWLINE);
 
-	if (g_cfg->net_ports.mode == PORT_ALLOC_STATIC)
-		vty_out(vty, "  rtp net-base %u%s", g_cfg->net_ports.base_port, VTY_NEWLINE);
-	else
-		vty_out(vty, "  rtp net-range %u %u%s",
-			g_cfg->net_ports.range_start, g_cfg->net_ports.range_end, VTY_NEWLINE);
+	vty_out(vty, "  rtp net-range %u %u%s",
+		g_cfg->net_ports.range_start, g_cfg->net_ports.range_end, VTY_NEWLINE);
+
 	if (g_cfg->net_ports.bind_addr)
 		vty_out(vty, "  rtp net-bind-ip %s%s", g_cfg->net_ports.bind_addr, VTY_NEWLINE);
 
@@ -199,14 +187,15 @@ static void dump_trunk(struct vty *vty, struct mgcp_trunk_config *cfg,
 	for (i = 1; i < cfg->number_endpoints; ++i) {
 		struct mgcp_endpoint *endp = &cfg->endpoints[i];
 
-		vty_out(vty, "Endpoint 0x%.2x: CI: %d%s",
-			i, endp->ci, VTY_NEWLINE);
-
+		vty_out(vty, "Endpoint 0x%.2x:%s",
+			i, VTY_NEWLINE);
+		
 		llist_for_each_entry(conn, &endp->conns, entry) {
 			vty_out(vty, "   CONN: %s%s",
 				mgcp_conn_dump(conn), VTY_NEWLINE);
 
-			if (verbose && endp->allocated) {
+			
+			if (verbose) {
 				/* FIXME: Also add verbosity for other
 				 * connection types (E1) as soon as
 				 * the implementation is available */
@@ -259,17 +248,17 @@ DEFUN(cfg_mgcp_local_ip,
 	return CMD_SUCCESS;
 }
 
-DEFUN(cfg_mgcp_bts_ip,
-      cfg_mgcp_bts_ip_cmd,
-      "bts ip A.B.C.D",
-      "BTS Audio source/destination options\n"
-      IP_STR
-      "IPv4 Address of the BTS\n")
-{
-	osmo_talloc_replace_string(g_cfg, &g_cfg->bts_ip, argv[0]);
-	inet_aton(g_cfg->bts_ip, &g_cfg->bts_in);
-	return CMD_SUCCESS;
-}
+//DEFUN(cfg_mgcp_bts_ip,
+//      cfg_mgcp_bts_ip_cmd,
+//      "bts ip A.B.C.D",
+//      "BTS Audio source/destination options\n"
+//      IP_STR
+//      "IPv4 Address of the BTS\n")
+//{
+//	osmo_talloc_replace_string(g_cfg, &g_cfg->bts_ip, argv[0]);
+//	inet_aton(g_cfg->bts_ip, &g_cfg->bts_in);
+//	return CMD_SUCCESS;
+//}
 
 #define BIND_STR "Listen/Bind related socket option\n"
 DEFUN(cfg_mgcp_bind_ip,
@@ -318,7 +307,7 @@ static void parse_range(struct mgcp_port_range *range, const char **argv)
 	range->mode = PORT_ALLOC_DYNAMIC;
 	range->range_start = atoi(argv[0]);
 	range->range_end = atoi(argv[1]);
-	range->last_port = g_cfg->bts_ports.range_start;
+	range->last_port = g_cfg->net_ports.range_start;
 }
 
 
@@ -326,28 +315,28 @@ static void parse_range(struct mgcp_port_range *range, const char **argv)
 #define BTS_START_STR "First UDP port allocated for the BTS side\n"
 #define NET_START_STR "First UDP port allocated for the NET side\n"
 #define UDP_PORT_STR "UDP Port number\n"
-DEFUN(cfg_mgcp_rtp_bts_base_port,
-      cfg_mgcp_rtp_bts_base_port_cmd,
-      "rtp bts-base <0-65534>",
-      RTP_STR
-      BTS_START_STR
-      UDP_PORT_STR)
-{
-	parse_base(&g_cfg->bts_ports, argv);
-	return CMD_SUCCESS;
-}
+//DEFUN(cfg_mgcp_rtp_bts_base_port,
+//      cfg_mgcp_rtp_bts_base_port_cmd,
+//      "rtp bts-base <0-65534>",
+//      RTP_STR
+//     BTS_START_STR
+//      UDP_PORT_STR)
+//{
+//	parse_base(&g_cfg->bts_ports, argv);
+//	return CMD_SUCCESS;
+//}
 
 #define RANGE_START_STR "Start of the range of ports\n"
 #define RANGE_END_STR "End of the range of ports\n"
-DEFUN(cfg_mgcp_rtp_bts_range,
-      cfg_mgcp_rtp_bts_range_cmd,
-      "rtp bts-range <0-65534> <0-65534>",
-      RTP_STR "Range of ports to use for the BTS side\n"
-      RANGE_START_STR RANGE_END_STR)
-{
-	parse_range(&g_cfg->bts_ports, argv);
-	return CMD_SUCCESS;
-}
+//DEFUN(cfg_mgcp_rtp_bts_range,
+//      cfg_mgcp_rtp_bts_range_cmd,
+//      "rtp bts-range <0-65534> <0-65534>",
+//      RTP_STR "Range of ports to use for the BTS side\n"
+//      RANGE_START_STR RANGE_END_STR)
+//{
+//	parse_range(&g_cfg->bts_ports, argv);
+//	return CMD_SUCCESS;
+//}
 
 DEFUN(cfg_mgcp_rtp_net_range,
       cfg_mgcp_rtp_net_range_cmd,
@@ -368,18 +357,18 @@ DEFUN(cfg_mgcp_rtp_net_base_port,
 	return CMD_SUCCESS;
 }
 
-ALIAS_DEPRECATED(cfg_mgcp_rtp_bts_base_port, cfg_mgcp_rtp_base_port_cmd,
-      "rtp base <0-65534>",
-      RTP_STR BTS_START_STR UDP_PORT_STR)
+//ALIAS_DEPRECATED(cfg_mgcp_rtp_bts_base_port, cfg_mgcp_rtp_base_port_cmd,
+//      "rtp base <0-65534>",
+//      RTP_STR BTS_START_STR UDP_PORT_STR)
 
-DEFUN(cfg_mgcp_rtp_bts_bind_ip,
-      cfg_mgcp_rtp_bts_bind_ip_cmd,
-      "rtp bts-bind-ip A.B.C.D",
-      RTP_STR "Bind endpoints facing the BTS\n" "Address to bind to\n")
-{
-	osmo_talloc_replace_string(g_cfg, &g_cfg->bts_ports.bind_addr, argv[0]);
-	return CMD_SUCCESS;
-}
+//DEFUN(cfg_mgcp_rtp_bts_bind_ip,
+//      cfg_mgcp_rtp_bts_bind_ip_cmd,
+//      "rtp bts-bind-ip A.B.C.D",
+//      RTP_STR "Bind endpoints facing the BTS\n" "Address to bind to\n")
+//{
+//	osmo_talloc_replace_string(g_cfg, &g_cfg->bts_ports.bind_addr, argv[0]);
+//	return CMD_SUCCESS;
+//}
 
 DEFUN(cfg_mgcp_rtp_no_bts_bind_ip,
       cfg_mgcp_rtp_no_bts_bind_ip_cmd,
@@ -1309,15 +1298,15 @@ int mgcp_vty_init(void)
 
 	vty_install_default(MGCP_NODE);
 	install_element(MGCP_NODE, &cfg_mgcp_local_ip_cmd);
-	install_element(MGCP_NODE, &cfg_mgcp_bts_ip_cmd);
+//	install_element(MGCP_NODE, &cfg_mgcp_bts_ip_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_bind_ip_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_bind_port_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_bind_early_cmd);
-	install_element(MGCP_NODE, &cfg_mgcp_rtp_base_port_cmd);
-	install_element(MGCP_NODE, &cfg_mgcp_rtp_bts_base_port_cmd);
+//	install_element(MGCP_NODE, &cfg_mgcp_rtp_base_port_cmd);
+//	install_element(MGCP_NODE, &cfg_mgcp_rtp_bts_base_port_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_rtp_net_base_port_cmd);
-	install_element(MGCP_NODE, &cfg_mgcp_rtp_bts_range_cmd);
-	install_element(MGCP_NODE, &cfg_mgcp_rtp_bts_bind_ip_cmd);
+//	install_element(MGCP_NODE, &cfg_mgcp_rtp_bts_range_cmd);
+//	install_element(MGCP_NODE, &cfg_mgcp_rtp_bts_bind_ip_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_rtp_no_bts_bind_ip_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_rtp_net_range_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_rtp_net_bind_ip_cmd);
@@ -1389,54 +1378,43 @@ int mgcp_vty_init(void)
 	return 0;
 }
 
-static int early_bind(struct mgcp_endpoint *endp, struct mgcp_trunk_config *trunk)
-{
-	struct mgcp_config *cfg = trunk->cfg;
-	struct mgcp_conn_rtp *conn_net = NULL;
-	struct mgcp_conn_rtp *conn_bts = NULL;
-
-	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
-	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
-
-	if (!conn_bts || !conn_net) {
-		LOGP(DLMGCP, LOGL_ERROR,
-		     "RTP connections not yet initalized, Can not bind!\n");
-		return -1;
-	}
-
-	/* FIXME: It looks just like that the early binding, is not compatible
-	 * with the idea of dynamically allocated rtp connections. We will have
-	 * to go for a dynamic allocation that picks from a port range and get
-	 * rid of the static allocation/pre-binding completely. */
-
-	if (cfg->bts_ports.mode == PORT_ALLOC_STATIC) {
-		cfg->last_bts_port += 2;
-		if (mgcp_bind_bts_rtp_port(endp, cfg->last_bts_port, conn_bts) != 0) {
-			LOGP(DLMGCP, LOGL_FATAL,
-			     "Failed to bind: %d\n", cfg->last_bts_port);
-			return -1;
-		}
-
-		conn_bts->end.local_alloc = PORT_ALLOC_STATIC;
-	}
-
-	if (cfg->net_ports.mode == PORT_ALLOC_STATIC) {
-		cfg->last_net_port += 2;
-		if (mgcp_bind_net_rtp_port(endp, cfg->last_net_port, conn_net) != 0) {
-			LOGP(DLMGCP, LOGL_FATAL,
-			     "Failed to bind: %d\n", cfg->last_net_port);
-			return -1;
-		}
-
-		conn_net->end.local_alloc = PORT_ALLOC_STATIC;
-	}
-
-	return 0;
-}
+//static int early_bind(struct mgcp_endpoint *endp, struct mgcp_trunk_config *trunk)
+//{
+//	struct mgcp_config *cfg = trunk->cfg;
+//	struct mgcp_conn_rtp *conn_net = NULL;
+//	struct mgcp_conn_rtp *conn_bts = NULL;
+//
+//	conn_bts = mgcp_conn_get_rtp(&endp->conns, CONN_ID_BTS);
+//	conn_net = mgcp_conn_get_rtp(&endp->conns, CONN_ID_NET);
+//
+//	if (!conn_bts || !conn_net) {
+//		LOGP(DLMGCP, LOGL_ERROR,
+//		     "RTP connections not yet initalized, Can not bind!\n");
+//		return -1;
+//	}
+//
+//	/* FIXME: It looks just like that the early binding, is not compatible
+//	 * with the idea of dynamically allocated rtp connections. We will have
+//	 * to go for a dynamic allocation that picks from a port range and get
+//	 * rid of the static allocation/pre-binding completely. */
+//
+//	if (cfg->net_ports.mode == PORT_ALLOC_STATIC) {
+//		cfg->last_net_port += 2;
+//		if (mgcp_bind_net_rtp_port(endp, cfg->last_net_port, conn_net) != 0) {
+//			LOGP(DLMGCP, LOGL_FATAL,
+//			     "Failed to bind: %d\n", cfg->last_net_port);
+//			return -1;
+//		}
+//
+//		conn_net->end.local_alloc = PORT_ALLOC_STATIC;
+//	}
+//
+//	return 0;
+//}
 
 static int allocate_trunk(struct mgcp_trunk_config *trunk)
 {
-	int i;
+//	int i;
 
 	if (mgcp_endpoints_allocate(trunk) != 0) {
 		LOGP(DLMGCP, LOGL_ERROR,
@@ -1445,12 +1423,12 @@ static int allocate_trunk(struct mgcp_trunk_config *trunk)
 		return -1;
 	}
 
-	/* early bind */
-	for (i = 1; i < trunk->number_endpoints; ++i) {
-		struct mgcp_endpoint *endp = &trunk->endpoints[i];
-		if (early_bind(endp, trunk) == -1)
-			return -1;
-	}
+//	/* early bind */
+//	for (i = 1; i < trunk->number_endpoints; ++i) {
+//		struct mgcp_endpoint *endp = &trunk->endpoints[i];
+//		if (early_bind(endp, trunk) == -1)
+//			return -1;
+//	}
 
 	return 0;
 }
