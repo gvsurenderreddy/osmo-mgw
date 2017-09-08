@@ -1,8 +1,11 @@
-/* Media Gateway Control Protocol Media Gateway: RFC 3435 */
-/* Implementations useful both for the MGCP GW as well as MGCP GW clients */
+/* MGCP common implementations.
+ * These are used in libosmo-mgcp as well as libosmo-mgcp-client.
+ * To avoid interdependency, these are implemented in .h file only. */
 
 /*
- * (C) 2016 by sysmocom s.m.f.c. GmbH <info@sysmocom.de>
+ * (C) 2017 by sysmocom s.f.m.c. GmbH <info@sysmocom.de>
+ * (C) 2009-2012 by Holger Hans Peter Freyther <zecke@selfish.org>
+ * (C) 2009-2012 by On-Waves
  * All Rights Reserved
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,22 +23,28 @@
  *
  */
 
+#pragma once
+
+#include <string.h>
 #include <errno.h>
 
-#include <osmocom/core/utils.h>
-#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/core/msgb.h>
+#include <osmocom/core/logging.h>
 
-const struct value_string mgcp_connection_mode_strs[] = {
-	{ MGCP_CONN_NONE, "none" },
-	{ MGCP_CONN_RECV_SEND, "sendrecv" },
-	{ MGCP_CONN_SEND_ONLY, "sendonly" },
-	{ MGCP_CONN_RECV_ONLY, "recvonly" },
-	{ MGCP_CONN_LOOPBACK, "loopback" },
-	{ 0, NULL }
+#define for_each_non_empty_line(line, save)			\
+	for (line = strtok_r(NULL, "\r\n", &save); line;	\
+	     line = strtok_r(NULL, "\r\n", &save))
+
+enum mgcp_connection_mode {
+	MGCP_CONN_NONE = 0,
+	MGCP_CONN_RECV_ONLY = 1,
+	MGCP_CONN_SEND_ONLY = 2,
+	MGCP_CONN_RECV_SEND = MGCP_CONN_RECV_ONLY | MGCP_CONN_SEND_ONLY,
+	MGCP_CONN_LOOPBACK  = 4 | MGCP_CONN_RECV_SEND,
 };
 
 /* Ensure that the msg->l2h is NUL terminated. */
-int mgcp_msg_terminate_nul(struct msgb *msg)
+static inline int mgcp_msg_terminate_nul(struct msgb *msg)
 {
 	unsigned char *tail = msg->l2h + msgb_l2len(msg); /* char after l2 data */
 	if (tail[-1] == '\0')
@@ -52,3 +61,4 @@ int mgcp_msg_terminate_nul(struct msgb *msg)
 	}
 	return 0;
 }
+
