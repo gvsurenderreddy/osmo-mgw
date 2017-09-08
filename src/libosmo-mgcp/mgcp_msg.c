@@ -24,6 +24,7 @@
 #include <limits.h>
 
 #include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/mgcp/mgcp_common.h>
 #include <osmocom/mgcp/mgcp_msg.h>
 
 /*! \brief Display an mgcp message on the log output.
