@@ -24,8 +24,8 @@
 #include <osmocom/core/msgb.h>
 #include <osmocom/core/logging.h>
 
-#include <osmocom/legacy_mgcp/mgcp.h>
-#include <osmocom/legacy_mgcp/mgcp_internal.h>
+#include <osmocom/mgcp/mgcp.h>
+#include <osmocom/mgcp/mgcp_internal.h>
 #include <osmocom/mgcp_client/mgcp_client.h>
 #include <osmocom/mgcp_client/mgcp_client_internal.h>
 
