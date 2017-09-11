@@ -578,17 +578,45 @@ mgcp_header_done:
 		return create_err_response(endp, 400, "CRCX", p->trans);
 	}
 
+	if (!ci) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "CRCX: endpoint:%x insufficient parameters, missing connection id\n",
+		     ENDPOINT_NUMBER(endp));
+		return create_err_response(endp, 400, "CRCX", p->trans);
+	}
+
 	/* Check if we are able to accept the creation of another connection */
 	if (llist_count(&endp->conns) >= 2) {
-		/* FIXME: Implement something compareable to
-		 * tcfg->force_realloc like we had before.
-		 * The idea is to prevent endpoints locking
-		 * up in case some entity forgets to close
-		 * them properly */
 		LOGP(DLMGCP, LOGL_ERROR,
 		     "CRCX: endpoint:%x endpoint full, max. 2 connections allowed!\n",
 		     ENDPOINT_NUMBER(endp));
-		return create_err_response(endp, 400, "CRCX", p->trans);
+		if (tcfg->force_realloc) {
+			/* There is no more room for a connection, make some
+			 * room by blindly tossing the oldest of the two two
+			 * connections */
+			mgcp_conn_free_oldest(&endp->conns);
+		} else {
+			/* There is no more room for a connection, leave
+			 * everything as it is and return with an error */
+			return create_err_response(endp, 400, "CRCX", p->trans);
+		}
+	}
+
+	/* Check if this endpoint already serves a call, if so, check if the
+	 * callids match up so that we are sure that this is our call */
+	if (endp->callid && mgcp_verify_call_id(endp, callid)) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "CRCX: endpoint:%x allready seized by other call (%s)\n",
+		     ENDPOINT_NUMBER(endp), endp->callid);
+		if (tcfg->force_realloc)
+			/* This is not our call, toss everything by releasing
+			 * the entire endpoint. (rude!) */
+			mgcp_release_endp(endp);
+		else {
+			/* This is not our call, leave everything as it is and
+			 * return with an error. */
+			return create_err_response(endp, 400, "CRCX", p->trans);
+		}
 	}
 
 	/* Set the callid, creation of another connection will only be possible
@@ -601,6 +629,22 @@ mgcp_header_done:
 			     local_options);
 
 	conn_id = strtoul(ci, NULL, 10);
+
+	/* Only accept another connection when the connection ID is different. */
+	if (mgcp_conn_get_rtp(&endp->conns, conn_id)) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "CRCX: endpoint:%x there is already a connection with id %u present!\n",
+		     conn_id, ENDPOINT_NUMBER(endp));
+		if (tcfg->force_realloc) {
+			/* Ignore the existing connection by just freeing it */
+			mgcp_conn_free(&endp->conns, conn_id);
+		} else {
+			/* There is already a connection with that ID present,
+			 * leave everything as it is and return with an error. */
+			return create_err_response(endp, 400, "CRCX", p->trans);
+		}
+	}
+
 	snprintf(conn_name, sizeof(conn_name), "%s-%u", callid, conn_id);
 	mgcp_conn_alloc(NULL, &endp->conns, conn_id, MGCP_CONN_TYPE_RTP,
 			conn_name);

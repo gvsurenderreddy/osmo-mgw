@@ -162,6 +162,10 @@ struct mgcp_trunk_config {
 	/* timer */
 	struct osmo_timer_list keepalive_timer;
 
+	/* When set, incoming RTP packets are not filtered
+	 * when ports and ip-address do not match (debug) */
+	int rtp_accept_all;
+
 	unsigned int number_endpoints;
 	struct mgcp_endpoint *endpoints;
 };

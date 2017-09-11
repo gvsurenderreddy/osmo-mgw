@@ -300,9 +300,15 @@ int mgcp_check_param(const struct mgcp_endpoint *endp, const char *line)
   * \returns 1 when callid seems plausible, 0 on error */
 int mgcp_verify_call_id(struct mgcp_endpoint *endp, const char *callid)
 {
-
 	/*! This function compares the supplied callid with the called that is
 	 *  stored in the endpoint structure. */
+
+	if (!endp)
+		return -1;
+	if (!callid)
+		return -1;
+	if (!endp->callid)
+		return -1;
 
 	if (strcmp(endp->callid, callid) != 0) {
 		LOGP(DLMGCP, LOGL_ERROR,
@@ -320,7 +326,12 @@ int mgcp_verify_call_id(struct mgcp_endpoint *endp, const char *callid)
   * \returns 1 when connection id seems plausible, 0 on error */
 int mgcp_verify_ci(struct mgcp_endpoint *endp, const char *ci)
 {
-	uint32_t id = strtoul(ci, NULL, 10);
+	uint32_t id;
+
+	if (!endp)
+		return -1;
+
+	id = strtoul(ci, NULL, 10);
 
 	if (mgcp_conn_get(&endp->conns, id))
 		return 0;

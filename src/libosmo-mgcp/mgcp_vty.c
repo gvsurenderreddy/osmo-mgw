@@ -489,6 +489,16 @@ DEFUN(cfg_mgcp_force_realloc,
 	return CMD_SUCCESS;
 }
 
+DEFUN(cfg_mgcp_rtp_accept_all,
+      cfg_mgcp_rtp_accept_all_cmd,
+      "rtp-accept-all (0|1)",
+      "Accept all RTP packets, even when the originating IP/Port does not match\n"
+      "enable filter\n" "disable filter\n")
+{
+	g_cfg->trunk.rtp_accept_all = atoi(argv[0]);
+	return CMD_SUCCESS;
+}
+
 DEFUN(cfg_mgcp_number_endp,
       cfg_mgcp_number_endp_cmd,
       "number endpoints <0-65534>",
@@ -639,6 +649,8 @@ static int config_write_trunk(struct vty *vty)
 		vty_out(vty, "  loop %d%s", trunk->audio_loop, VTY_NEWLINE);
 		vty_out(vty, "  force-realloc %d%s",
 			trunk->force_realloc, VTY_NEWLINE);
+		vty_out(vty, "  rtp-accept-all %d%s",
+			trunk->rtp_accept_all, VTY_NEWLINE);
 		if (trunk->omit_rtcp)
 			vty_out(vty, "  rtcp-omit%s", VTY_NEWLINE);
 		else
@@ -1178,6 +1190,7 @@ int mgcp_vty_init(void)
 	install_element(MGCP_NODE, &cfg_mgcp_sdp_payload_name_cmd_old);
 	install_element(MGCP_NODE, &cfg_mgcp_loop_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_force_realloc_cmd);
+	install_element(MGCP_NODE, &cfg_mgcp_rtp_accept_all_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_number_endp_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_omit_rtcp_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_no_omit_rtcp_cmd);

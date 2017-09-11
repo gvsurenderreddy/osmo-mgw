@@ -222,6 +222,15 @@ void mgcp_conn_free(struct llist_head *conns, uint32_t id)
 	talloc_free(conn);
 }
 
+/*! \brief free oldest connection in the list
+ *  \param[in] conns list with connections */
+void mgcp_conn_free_oldest(struct llist_head *conns)
+{
+	struct mgcp_conn *conn;
+	conn = llist_last_entry(conns, struct mgcp_conn, entry);
+	mgcp_conn_free(conns, conn->id);
+}
+
 /*! \brief free all connections at once
  *  \param[in] conns list with connections */
 void mgcp_conn_free_all(struct llist_head *conns)

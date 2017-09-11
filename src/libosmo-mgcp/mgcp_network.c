@@ -359,7 +359,7 @@ void mgcp_get_net_downlink_format_default(struct mgcp_endpoint *endp,
 					  struct mgcp_conn_rtp *conn)
 {
 	LOGP(DLMGCP, LOGL_DEBUG,
-	     "endpoint:%x conn:%s mgcp_get_net_downlink_format_default()\n",
+	     "endpoint:%x conn:%s using format defaults\n",
 	     ENDPOINT_NUMBER(endp), mgcp_conn_dump(conn->conn));
 
 	*payload_type = conn->end.codec.payload_type;
@@ -751,6 +751,45 @@ static int receive_from(struct mgcp_endpoint *endp, int fd,
 	return rc;
 }
 
+/* Check if the origin (addr) matches the address/port data of the rtp
+ * connections. */
+static int check_rtp_origin(struct mgcp_endpoint *endp,
+			    struct mgcp_conn_rtp *conn, struct sockaddr_in addr)
+{
+	/* Note: Check if the inbound RTP data comes from the same host to
+	 * which we send our outgoing RTP traffic. */
+	if (memcmp(&addr.sin_addr, &conn->end.addr, sizeof(addr.sin_addr))
+	    != 0) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "endpoint:%x data from wrong address: %s, ",
+		     ENDPOINT_NUMBER(endp), inet_ntoa(addr.sin_addr));
+		LOGPC(DLMGCP, LOGL_ERROR, "expected: %s\n",
+		      inet_ntoa(conn->end.addr));
+		LOGP(DLMGCP, LOGL_ERROR, "endpoint:%x packet tossed\n",
+		     ENDPOINT_NUMBER(endp));
+		return -1;
+	}
+
+	/* Note: Usually the remote remote port of the data we receive will be
+	 * the same as the remote port where we transmit outgoing RTP traffic
+	 * to (set by MDCX). We use this to check the origin of the data for
+	 * plausibility. */
+	if (conn->end.rtp_port != addr.sin_port &&
+	    conn->end.rtcp_port != addr.sin_port) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "endpoint:%x data from wrong source port: %d, ",
+		     ENDPOINT_NUMBER(endp), ntohs(addr.sin_port));
+		LOGPC(DLMGCP, LOGL_ERROR,
+		      "expected: %d for RTP or %d for RTCP\n",
+		      ntohs(conn->end.rtp_port), ntohs(conn->end.rtcp_port));
+		LOGP(DLMGCP, LOGL_ERROR, "endpoint:%x packet tossed\n",
+		     ENDPOINT_NUMBER(endp));
+		return -1;
+	}
+
+	return 0;
+}
+
 /* Receive RTP data from a specified source connection and dispatch it to a
  * destination connection. */
 static int mgcp_recv(struct osmo_fd *fd, struct mgcp_conn_rtp *conn_src,
@@ -760,11 +799,13 @@ static int mgcp_recv(struct osmo_fd *fd, struct mgcp_conn_rtp *conn_src,
 	struct sockaddr_in addr;
 	struct mgcp_endpoint *endp;
 	int rc, proto;
+	struct mgcp_trunk_config *tcfg;
 
 	OSMO_ASSERT(conn_src);
 	OSMO_ASSERT(conn_dst);
 
 	endp = (struct mgcp_endpoint *)fd->data;
+	tcfg = endp->tcfg;
 
 	LOGP(DLMGCP, LOGL_DEBUG, "endpoint:%x receiving RTP/RTCP packet...\n",
 	     ENDPOINT_NUMBER(endp));
@@ -782,40 +823,11 @@ static int mgcp_recv(struct osmo_fd *fd, struct mgcp_conn_rtp *conn_src,
 	LOGP(DLMGCP, LOGL_DEBUG, "endpoint:%x conn:%s\n", ENDPOINT_NUMBER(endp),
 	     mgcp_conn_dump(conn_src->conn));
 
-#if 0
-	/* Note: Check if tha inbound RTP data comes from the same host to
-	 * which we send our outgoing RTP traffic. */
-	if (memcmp(&addr.sin_addr, &conn_src->end.addr, sizeof(addr.sin_addr))
-	    != 0) {
-		LOGP(DLMGCP, LOGL_ERROR,
-		     "endpoint:%x data from wrong address: %s, ",
-		     ENDPOINT_NUMBER(endp), inet_ntoa(addr.sin_addr));
-		LOGPC(DLMGCP, LOGL_ERROR, "expected: %s\n",
-		      inet_ntoa(conn_src->end.addr));
-		LOGP(DLMGCP, LOGL_ERROR, "endpoint:%x packet tossed\n");
-		return -1;
+	/* Check if the origin of the RTP packet seems plausible */
+	if (tcfg->rtp_accept_all == 0) {
+		if (check_rtp_origin(endp, conn_src, addr) != 0)
+			return -1;
 	}
-
-	/* FIXME: Make this a VTY option, this can make debugging unnecessary difficult! */
-	/* Note: Usually the remote remote port of the data we receive will be
-	 * the same as the remote port where we transmit outgoing RTP traffic
-	 * to (set by MDCX). We use this to check the origin of the data for
-	 * plausibility. */
-
-	if (conn_src->end.rtp_port != addr.sin_port &&
-	    conn_src->end.rtcp_port != addr.sin_port) {
-		LOGP(DLMGCP, LOGL_ERROR,
-		     "endpoint:%x data from wrong source port: %d, ",
-		     ENDPOINT_NUMBER(endp), ntohs(addr.sin_port));
-		LOGPC(DLMGCP, LOGL_ERROR,
-		      "expected: %d for RTP or %d for RTCP\n",
-		      ntohs(conn_src->end.rtp_port),
-		      ntohs(conn_src->end.rtcp_port));
-		LOGP(DLMGCP, LOGL_ERROR, "endpoint:%x packet tossed\n",
-		     ENDPOINT_NUMBER(endp));
-		return -1;
-	}
-#endif
 
 	/* Filter out dummy message */
 	if (rc == 1 && buf[0] == MGCP_DUMMY_LOAD) {
