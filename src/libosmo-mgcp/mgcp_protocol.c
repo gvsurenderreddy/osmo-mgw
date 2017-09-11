@@ -37,10 +37,11 @@
 #include <osmocom/mgcp/mgcp_common.h>
 #include <osmocom/mgcp/mgcp_internal.h>
 #include <osmocom/mgcp/mgcp_stat.h>
+#include <osmocom/mgcp/mgcp_msg.h>
 
 struct mgcp_request {
 	char *name;
-	struct msgb *(*handle_request) (struct mgcp_parse_data *data);
+	struct msgb *(*handle_request) (struct mgcp_parse_data * data);
 	char *debug_name;
 };
 
@@ -54,111 +55,67 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *data);
 static struct msgb *handle_rsip(struct mgcp_parse_data *data);
 static struct msgb *handle_noti_req(struct mgcp_parse_data *data);
 
-static int setup_rtp_processing(struct mgcp_endpoint *endp);
-static int mgcp_analyze_header(struct mgcp_parse_data *parse, char *data);
-
-/*! \brief Display an mgcp message on the log output.
- *  \param[in] message mgcp message string
- *  \param[in] len message mgcp message string length
- *  \param[in] preamble string to display in logtext in front of each line */
-void display_mgcp_message(unsigned char *message, unsigned int len,
-			  char *preamble)
+/* Initalize transcoder */
+static int setup_rtp_processing(struct mgcp_endpoint *endp,
+				struct mgcp_conn_rtp *conn)
 {
-	unsigned char line[80];
-	unsigned char *ptr;
-	unsigned int consumed = 0;
-	unsigned int consumed_line = 0;
-	unsigned int line_count = 0;
+	struct mgcp_config *cfg = endp->cfg;
+	struct mgcp_conn_rtp *conn_src = NULL;
+	struct mgcp_conn_rtp *conn_dst = conn;
+	struct mgcp_conn *_conn;
 
-	if (!log_check_level(DLMGCP, LOGL_DEBUG))
-		return;
-
-	while (1) {
-		memset(line, 0, sizeof(line));
-		ptr = line;
-		consumed_line = 0;
-		do {
-			if (*message != '\n' && *message != '\r') {
-				*ptr = *message;
-				ptr++;
-			}
-			message++;
-			consumed++;
-			consumed_line++;
-		} while (*message != '\n' && consumed < len
-			 && consumed_line < sizeof(line));
-
-		if (strlen((const char *)line)) {
-			LOGP(DLMGCP, LOGL_DEBUG, "%s: line #%02u: %s\n",
-			     preamble, line_count, line);
-			line_count++;
-		}
-
-		if (consumed >= len)
-			return;
-	}
-}
-
-/* Check the format of a line of an mgcp message string */
-static int mgcp_check_param(const struct mgcp_endpoint *endp, const char *line)
-{
-	const size_t line_len = strlen(line);
-	if (line[0] != '\0' && line_len < 2) {
-		LOGP(DLMGCP, LOGL_ERROR,
-			"Wrong MGCP option format: '%s' on 0x%x\n",
-			line, ENDPOINT_NUMBER(endp));
+	if (endp->type != MGCP_RTP_DEFAULT) {
+		LOGP(DLMGCP, LOGL_NOTICE,
+		     "endpoint:%x RTP-setup: Endpoint is not configured as RTP default, stopping here!\n",
+		     ENDPOINT_NUMBER(endp));
 		return 0;
 	}
 
-	return 1;
+	if (conn->conn->mode == MGCP_CONN_LOOPBACK) {
+		LOGP(DLMGCP, LOGL_NOTICE,
+		     "endpoint:%x RTP-setup: Endpoint is in loopback mode, stopping here!\n",
+		     ENDPOINT_NUMBER(endp));
+		return 0;
+	}
+
+	/* Find the "sister" connection */
+	llist_for_each_entry(_conn, &endp->conns, entry) {
+		if (_conn->id != conn->conn->id) {
+			conn_src = &_conn->u.rtp;
+			break;
+		}
+	}
+
+	return cfg->setup_rtp_processing_cb(endp, &conn_dst->end,
+					    &conn_src->end);
 }
-
-//static uint32_t generate_call_id(struct mgcp_config *cfg)
-//{
-//	int i;
-
-	/* use the call id */
-//	++cfg->last_call_id;
-
-	/* handle wrap around */
-//	if (cfg->last_call_id == CI_UNUSED)
-//		++cfg->last_call_id;
-
-	/* callstack can only be of size number_of_endpoints */
-	/* verify that the call id is free, e.g. in case of overrun */
-//	for (i = 1; i < cfg->trunk.number_endpoints; ++i)
-//		if (cfg->trunk.endpoints[i].ci == cfg->last_call_id)
-//			return generate_call_id(cfg);
-//	printf("===============================================> generate_call_id() FIXME!\n");
-	
-//	return cfg->last_call_id;
-//}
 
 /* array of function pointers for handling various
  * messages. In the future this might be binary sorted
  * for performance reasons. */
-static const struct mgcp_request mgcp_requests [] = {
+static const struct mgcp_request mgcp_requests[] = {
 	MGCP_REQUEST("AUEP", handle_audit_endpoint, "AuditEndpoint")
-	MGCP_REQUEST("CRCX", handle_create_con, "CreateConnection")
-	MGCP_REQUEST("DLCX", handle_delete_con, "DeleteConnection")
-	MGCP_REQUEST("MDCX", handle_modify_con, "ModifiyConnection")
-	MGCP_REQUEST("RQNT", handle_noti_req, "NotificationRequest")
+	    MGCP_REQUEST("CRCX", handle_create_con, "CreateConnection")
+	    MGCP_REQUEST("DLCX", handle_delete_con, "DeleteConnection")
+	    MGCP_REQUEST("MDCX", handle_modify_con, "ModifiyConnection")
+	    MGCP_REQUEST("RQNT", handle_noti_req, "NotificationRequest")
 
-	/* SPEC extension */
-	MGCP_REQUEST("RSIP", handle_rsip, "ReSetInProgress")
+	    /* SPEC extension */
+	    MGCP_REQUEST("RSIP", handle_rsip, "ReSetInProgress")
 };
 
-/* Helper function for do_retransmission() and create_resp() */
+/* Helper function to allocate some memory for responses and retransmissions */
 static struct msgb *mgcp_msgb_alloc(void)
 {
 	struct msgb *msg;
 	msg = msgb_alloc_headroom(4096, 128, "MGCP msg");
 	if (!msg)
-	    LOGP(DLMGCP, LOGL_ERROR, "Failed to msgb for MGCP data.\n");
+		LOGP(DLMGCP, LOGL_ERROR, "Failed to msgb for MGCP data.\n");
 
 	return msg;
 }
 
+/* Helper function for do_retransmission() and create_resp() */
 static struct msgb *do_retransmission(const struct mgcp_endpoint *endp)
 {
 	struct msgb *msg = mgcp_msgb_alloc();
@@ -167,7 +124,7 @@ static struct msgb *do_retransmission(const struct mgcp_endpoint *endp)
 
 	msg->l2h = msgb_put(msg, strlen(endp->last_response));
 	memcpy(msg->l2h, endp->last_response, msgb_l2len(msg));
-	display_mgcp_message(msg->l2h, msgb_l2len(msg), "Retransmitted response");
+	mgcp_disp_msg(msg->l2h, msgb_l2len(msg), "Retransmitted response");
 	return msg;
 }
 
@@ -183,8 +140,8 @@ static struct msgb *create_resp(struct mgcp_endpoint *endp, int code,
 	if (!res)
 		return NULL;
 
-	len = snprintf((char *) res->data, 2048, "%d %s%s%s\r\n%s",
-			code, trans, txt, param ? param : "", sdp ? sdp : "");
+	len = snprintf((char *)res->data, 2048, "%d %s%s%s\r\n%s",
+		       code, trans, txt, param ? param : "", sdp ? sdp : "");
 	if (len < 0) {
 		LOGP(DLMGCP, LOGL_ERROR, "Failed to sprintf MGCP response.\n");
 		msgb_free(res);
@@ -193,7 +150,7 @@ static struct msgb *create_resp(struct mgcp_endpoint *endp, int code,
 
 	res->l2h = msgb_put(res, len);
 	LOGP(DLMGCP, LOGL_DEBUG, "Generated response: code=%d\n", code);
-	display_mgcp_message(res->l2h, msgb_l2len(res), "Generated response");
+	mgcp_disp_msg(res->l2h, msgb_l2len(res), "Generated response");
 
 	/*
 	 * Remember the last transmission per endpoint.
@@ -204,28 +161,31 @@ static struct msgb *create_resp(struct mgcp_endpoint *endp, int code,
 		talloc_free(endp->last_trans);
 		endp->last_trans = talloc_strdup(tcfg->endpoints, trans);
 		endp->last_response = talloc_strndup(tcfg->endpoints,
-						(const char *) res->l2h,
-						msgb_l2len(res));
+						     (const char *)res->l2h,
+						     msgb_l2len(res));
 	}
 
 	return res;
 }
 
 static struct msgb *create_ok_resp_with_param(struct mgcp_endpoint *endp,
-					int code, const char *msg,
-					const char *trans, const char *param)
+					      int code, const char *msg,
+					      const char *trans,
+					      const char *param)
 {
 	return create_resp(endp, code, " OK", msg, trans, param, NULL);
 }
 
 static struct msgb *create_ok_response(struct mgcp_endpoint *endp,
-					int code, const char *msg, const char *trans)
+				       int code, const char *msg,
+				       const char *trans)
 {
 	return create_ok_resp_with_param(endp, code, msg, trans, NULL);
 }
 
 static struct msgb *create_err_response(struct mgcp_endpoint *endp,
-					int code, const char *msg, const char *trans)
+					int code, const char *msg,
+					const char *trans)
 {
 	return create_resp(endp, code, " FAIL", msg, trans, NULL, NULL);
 }
@@ -247,12 +207,11 @@ static int write_response_sdp(struct mgcp_endpoint *endp,
 					      &audio_name, &fmtp_extra, conn);
 
 	len = snprintf(sdp_record, size,
-			"v=0\r\n"
-			"o=- %u 23 IN IP4 %s\r\n"
-			"s=-\r\n"
-			"c=IN IP4 %s\r\n"
-			"t=0 0\r\n",
-			conn->conn->id, addr, addr);
+		       "v=0\r\n"
+		       "o=- %u 23 IN IP4 %s\r\n"
+		       "s=-\r\n"
+		       "c=IN IP4 %s\r\n"
+		       "t=0 0\r\n", conn->conn->id, addr, addr);
 
 	if (len < 0 || len >= size)
 		goto buffer_too_small;
@@ -308,7 +267,8 @@ buffer_too_small:
 /* Format MGCP response string (with SDP attached) */
 static struct msgb *create_response_with_sdp(struct mgcp_endpoint *endp,
 					     struct mgcp_conn_rtp *conn,
-					     const char *msg, const char *trans_id)
+					     const char *msg,
+					     const char *trans_id)
 {
 	const char *addr = endp->cfg->local_ip;
 	char sdp_record[4096];
@@ -353,11 +313,9 @@ static void send_dummy(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn)
 		mgcp_send_dummy(endp, conn);
 }
 
-/*
- * handle incoming messages:
+/* handle incoming messages:
  *   - this can be a command (four letters, space, transaction id)
- *   - or a response (three numbers, space, transaction id)
- */
+ *   - or a response (three numbers, space, transaction id) */
 struct msgb *mgcp_handle_message(struct mgcp_config *cfg, struct msgb *msg)
 {
 	struct mgcp_parse_data pdata;
@@ -373,32 +331,33 @@ struct msgb *mgcp_handle_message(struct mgcp_config *cfg, struct msgb *msg)
 	if (mgcp_msg_terminate_nul(msg))
 		return NULL;
 
-	display_mgcp_message(msg->l2h, msgb_l2len(msg), "Received message");
+	mgcp_disp_msg(msg->l2h, msgb_l2len(msg), "Received message");
 
-        /* attempt to treat it as a response */
-        if (sscanf((const char *)&msg->l2h[0], "%3d %*s", &code) == 1) {
+	/* attempt to treat it as a response */
+	if (sscanf((const char *)&msg->l2h[0], "%3d %*s", &code) == 1) {
 		LOGP(DLMGCP, LOGL_DEBUG, "Response: Code: %d\n", code);
 		return NULL;
 	}
 
 	msg->l3h = &msg->l2h[4];
 
-
 	/*
 	 * Check for a duplicate message and respond.
 	 */
 	memset(&pdata, 0, sizeof(pdata));
 	pdata.cfg = cfg;
-	data = strline_r((char *) msg->l3h, &pdata.save);
-	pdata.found = mgcp_analyze_header(&pdata, data);
+	data = strline_r((char *)msg->l3h, &pdata.save);
+	pdata.found = mgcp_parse_header(&pdata, data);
 	if (pdata.endp && pdata.trans
-			&& pdata.endp->last_trans
-			&& strcmp(pdata.endp->last_trans, pdata.trans) == 0) {
+	    && pdata.endp->last_trans
+	    && strcmp(pdata.endp->last_trans, pdata.trans) == 0) {
 		return do_retransmission(pdata.endp);
 	}
 
 	for (i = 0; i < ARRAY_SIZE(mgcp_requests); ++i) {
-		if (strncmp(mgcp_requests[i].name, (const char *) &msg->l2h[0], 4) == 0) {
+		if (strncmp
+		    (mgcp_requests[i].name, (const char *)&msg->l2h[0],
+		     4) == 0) {
 			handled = 1;
 			resp = mgcp_requests[i].handle_request(&pdata);
 			break;
@@ -406,155 +365,10 @@ struct msgb *mgcp_handle_message(struct mgcp_config *cfg, struct msgb *msg)
 	}
 
 	if (!handled)
-		LOGP(DLMGCP, LOGL_NOTICE, "MSG with type: '%.4s' not handled\n", &msg->l2h[0]);
+		LOGP(DLMGCP, LOGL_NOTICE, "MSG with type: '%.4s' not handled\n",
+		     &msg->l2h[0]);
 
 	return resp;
-}
-
-/* We have a null terminated string with the endpoint name here. We only
- * support two kinds. Simple ones as seen on the BSC level and the ones
- * seen on the trunk side. */
-static struct mgcp_endpoint *find_e1_endpoint(struct mgcp_config *cfg,
-					     const char *mgcp)
-{
-	char *rest = NULL;
-	struct mgcp_trunk_config *tcfg;
-	int trunk, endp;
-
-	trunk = strtoul(mgcp + 6, &rest, 10);
-	if (rest == NULL || rest[0] != '/' || trunk < 1) {
-		LOGP(DLMGCP, LOGL_ERROR, "Wrong trunk name '%s'\n", mgcp);
-		return NULL;
-	}
-
-	endp = strtoul(rest + 1, &rest, 10);
-	if (rest == NULL || rest[0] != '@') {
-		LOGP(DLMGCP, LOGL_ERROR, "Wrong endpoint name '%s'\n", mgcp);
-		return NULL;
-	}
-
-	/* signalling is on timeslot 1 */
-	if (endp == 1)
-		return NULL;
-
-	tcfg = mgcp_trunk_num(cfg, trunk);
-	if (!tcfg) {
-		LOGP(DLMGCP, LOGL_ERROR, "The trunk %d is not declared.\n", trunk);
-		return NULL;
-	}
-
-	if (!tcfg->endpoints) {
-		LOGP(DLMGCP, LOGL_ERROR, "Endpoints of trunk %d not allocated.\n", trunk);
-		return NULL;
-	}
-
-	if (endp < 1 || endp >= tcfg->number_endpoints) {
-		LOGP(DLMGCP, LOGL_ERROR, "Failed to find endpoint '%s'\n", mgcp);
-		return NULL;
-	}
-
-	return &tcfg->endpoints[endp];
-}
-
-static struct mgcp_endpoint *find_endpoint(struct mgcp_config *cfg, const char *mgcp)
-{
-	char *endptr = NULL;
-	unsigned int gw = INT_MAX;
-
-	if (strncmp(mgcp, "ds/e1", 5) == 0)
-		return find_e1_endpoint(cfg, mgcp);
-
-	gw = strtoul(mgcp, &endptr, 16);
-	if (gw > 0 && gw < cfg->trunk.number_endpoints && endptr[0] == '@')
-		return &cfg->trunk.endpoints[gw];
-
-	LOGP(DLMGCP, LOGL_ERROR, "Not able to find the endpoint: '%s'\n", mgcp);
-	return NULL;
-}
-
-/*! \brief Analyze and parse the the hader of an MGCP messeage string.
- *  \param[in] pdata caller provided memory to store the parsing results
- *  \param[in] data mgcp message string
- *  \returns when the status line was complete and transaction_id and
- *  endp out parameters are set, -1 on ERROR */
-static int mgcp_analyze_header(struct mgcp_parse_data *pdata, char *data)
-{
-	int i = 0;
-	char *elem, *save = NULL;
-
-	OSMO_ASSERT(data);
-	pdata->trans = "000000";
-
-	for (elem = strtok_r(data, " ", &save); elem;
-	     elem = strtok_r(NULL, " ", &save)) {
-		switch (i) {
-		case 0:
-			pdata->trans = elem;
-			break;
-		case 1:
-			pdata->endp = find_endpoint(pdata->cfg, elem);
-			if (!pdata->endp) {
-				LOGP(DLMGCP, LOGL_ERROR,
-				     "Unable to find Endpoint `%s'\n", elem);
-				return -1;
-			}
-			break;
-		case 2:
-			if (strcmp("MGCP", elem)) {
-				LOGP(DLMGCP, LOGL_ERROR,
-				     "MGCP header parsing error\n");
-				return -1;
-			}
-			break;
-		case 3:
-			if (strcmp("1.0", elem)) {
-				LOGP(DLMGCP, LOGL_ERROR, "MGCP version `%s' "
-					"not supported\n", elem);
-				return -1;
-			}
-			break;
-		}
-		i++;
-	}
-
-	if (i != 4) {
-		LOGP(DLMGCP, LOGL_ERROR, "MGCP status line too short.\n");
-		pdata->trans = "000000";
-		pdata->endp = NULL;
-		return -1;
-	}
-
-	return 0;
-}
-
-/* Check if the specified callid matches the callid of the specified
- * endpoint */
-static int verify_call_id(struct mgcp_endpoint *endp,
-			  const char *callid)
-{
-	if (strcmp(endp->callid, callid) != 0) {
-		LOGP(DLMGCP, LOGL_ERROR, "CallIDs does not match on 0x%x. '%s' != '%s'\n",
-			ENDPOINT_NUMBER(endp), endp->callid, callid);
-		return -1;
-	}
-
-	return 0;
-}
-
-/* Check if a the specified endpoint holds a connection under the
- * specified connection identifier */
-static int verify_ci(struct mgcp_endpoint *endp,
-		     const char *ci)
-{
-	uint32_t id = strtoul(ci, NULL, 10);
-
-        if (mgcp_conn_get(&endp->conns, id))
-		return 0;
-
-	LOGP(DLMGCP, LOGL_ERROR, "endpoint:%x No connection found under ConnectionIdentifier %u\n",
-	     ENDPOINT_NUMBER(endp), id);
-
-	return -1;
 }
 
 /* AUEP command handler, processes the received command */
@@ -563,49 +377,11 @@ static struct msgb *handle_audit_endpoint(struct mgcp_parse_data *p)
 	LOGP(DLMGCP, LOGL_DEBUG, "AUEP: auditing endpoint ...\n");
 
 	if (p->found != 0) {
-		LOGP(DLMGCP, LOGL_ERROR, "AUEP: failed to find the endpoint.\n");
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "AUEP: failed to find the endpoint.\n");
 		return create_err_response(NULL, 500, "AUEP", p->trans);
 	} else
 		return create_ok_response(p->endp, 200, "AUEP", p->trans);
-}
-
-/* Parse connection mode. There are three possible modes, receive-only,
- * send/receive, and loopback */
-static int parse_conn_mode(const char *msg, struct mgcp_endpoint *endp,
-			   struct mgcp_conn_rtp *conn)
-{
-	int ret = 0;
-
-	if (!conn)
-		return -1;
-
-	if (strcmp(msg, "recvonly") == 0)
-		endp->conn_mode = MGCP_CONN_RECV_ONLY;
-	else if (strcmp(msg, "sendrecv") == 0)
-		endp->conn_mode = MGCP_CONN_RECV_SEND;
-	else if (strcmp(msg, "sendonly") == 0)
-		endp->conn_mode = MGCP_CONN_SEND_ONLY;
-	else if (strcmp(msg, "loopback") == 0)
-		endp->conn_mode = MGCP_CONN_LOOPBACK;
-	else {
-		LOGP(DLMGCP, LOGL_ERROR, "endpoint:%x unknown connection mode: '%s'\n",
-		     ENDPOINT_NUMBER(endp), msg);
-		ret = -1;
-	}
-
-	conn->end.output_enabled =
-	    endp->conn_mode & MGCP_CONN_SEND_ONLY ? 1 : 0;
-
-	LOGP(DLMGCP, LOGL_DEBUG,
-	     "endpoint:%x conn:%s\n",
-	     ENDPOINT_NUMBER(endp), mgcp_conn_dump(conn->conn));
-
-	LOGP(DLMGCP, LOGL_DEBUG,
-	     "endpoint:%x connection mode '%s' %d output_enabled %d\n",
-	     ENDPOINT_NUMBER(endp), msg,
-	     endp->conn_mode, conn->end.output_enabled);	
-
-	return ret;
 }
 
 /* Try to find a free port by attemting to bind on it. Also handle the
@@ -630,7 +406,7 @@ static int allocate_port(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn)
 
 		if (range->last_port >= range->range_end)
 			range->last_port = range->range_start;
-		
+
 		rc = mgcp_bind_net_rtp_port(endp, range->last_port, conn);
 
 		range->last_port += 2;
@@ -671,7 +447,9 @@ static void set_local_cx_options(void *ctx, struct mgcp_lco *lco,
 	if (a_opt && sscanf(a_opt, "a:%8[^,]", codec) == 1)
 		lco->codec = talloc_strdup(ctx, codec);
 
-	LOGP(DLMGCP, LOGL_DEBUG, "local CX options: lco->pkt_period_max: %i, lco->codec: %s\n", lco->pkt_period_max, lco->codec);
+	LOGP(DLMGCP, LOGL_DEBUG,
+	     "local CX options: lco->pkt_period_max: %i, lco->codec: %s\n",
+	     lco->pkt_period_max, lco->codec);
 }
 
 void mgcp_rtp_end_config(struct mgcp_endpoint *endp, int expect_ssrc_change,
@@ -701,28 +479,13 @@ uint32_t mgcp_rtp_packet_duration(struct mgcp_endpoint *endp,
 		f = rtp->frames_per_packet;
 	else if (rtp->packet_duration_ms && rtp->codec.frame_duration_num) {
 		int den = 1000 * rtp->codec.frame_duration_num;
-		f = (rtp->packet_duration_ms * rtp->codec.frame_duration_den + den/2)
-			/ den;
+		f = (rtp->packet_duration_ms * rtp->codec.frame_duration_den +
+		     den / 2)
+		    / den;
 	}
 
-	return rtp->codec.rate * f * rtp->codec.frame_duration_num / rtp->codec.frame_duration_den;
-}
-
-static int mgcp_parse_osmux_cid(const char *line)
-{
-	int osmux_cid;
-
-	if (sscanf(line + 2, "Osmux: %u", &osmux_cid) != 1)
-		return -1;
-
-	if (osmux_cid > OSMUX_CID_MAX) {
-		LOGP(DLMGCP, LOGL_ERROR, "Osmux ID too large: %u > %u\n",
-		     osmux_cid, OSMUX_CID_MAX);
-		return -1;
-	}
-	LOGP(DLMGCP, LOGL_DEBUG, "bsc-nat offered Osmux CID %u\n", osmux_cid);
-
-	return osmux_cid;
+	return rtp->codec.rate * f * rtp->codec.frame_duration_num /
+	    rtp->codec.frame_duration_den;
 }
 
 static int mgcp_osmux_setup(struct mgcp_endpoint *endp, const char *line)
@@ -754,7 +517,7 @@ static struct msgb *handle_create_con(struct mgcp_parse_data *p)
 	struct mgcp_conn_rtp *conn = NULL;
 	uint32_t conn_id;
 	char conn_name[512];
-	
+
 	LOGP(DLMGCP, LOGL_DEBUG, "CRCX: creating new connection ...\n");
 
 	if (p->found != 0)
@@ -774,7 +537,7 @@ static struct msgb *handle_create_con(struct mgcp_parse_data *p)
 			break;
 		case 'I':
 			ci = (const char *)line + 3;
-			break;			
+			break;
 		case 'M':
 			mode = (const char *)line + 3;
 			break;
@@ -814,10 +577,9 @@ mgcp_header_done:
 		     ENDPOINT_NUMBER(endp));
 		return create_err_response(endp, 400, "CRCX", p->trans);
 	}
-	
+
 	/* Check if we are able to accept the creation of another connection */
-	if (llist_count(&endp->conns) >= 2)
-	{
+	if (llist_count(&endp->conns) >= 2) {
 		/* FIXME: Implement something compareable to
 		 * tcfg->force_realloc like we had before.
 		 * The idea is to prevent endpoints locking
@@ -829,9 +591,9 @@ mgcp_header_done:
 		return create_err_response(endp, 400, "CRCX", p->trans);
 	}
 
-	/* FIXME: This is problematic, we will use the callids later as
-	 * connection identifiers, so we might want to store the callid
-	 * in the conn structure as well? */
+	/* Set the callid, creation of another connection will only be possible
+	 * when the callid matches up. (Connections are distinuished by their
+	 * connection ids) */
 	endp->callid = talloc_strdup(tcfg->endpoints, callid);
 
 	/* Extract audio codec information */
@@ -840,7 +602,8 @@ mgcp_header_done:
 
 	conn_id = strtoul(ci, NULL, 10);
 	snprintf(conn_name, sizeof(conn_name), "%s-%u", callid, conn_id);
-	mgcp_conn_alloc(NULL, &endp->conns, conn_id, MGCP_CONN_TYPE_RTP, conn_name);
+	mgcp_conn_alloc(NULL, &endp->conns, conn_id, MGCP_CONN_TYPE_RTP,
+			conn_name);
 	conn = mgcp_conn_get_rtp(&endp->conns, conn_id);
 	if (!conn) {
 		LOGP(DLMGCP, LOGL_ERROR,
@@ -850,7 +613,7 @@ mgcp_header_done:
 
 	}
 
-	if (parse_conn_mode(mode, endp, conn) != 0) {
+	if (mgcp_parse_conn_mode(mode, endp, conn->conn) != 0) {
 		error_code = 517;
 		goto error2;
 	}
@@ -861,15 +624,6 @@ mgcp_header_done:
 		goto error2;
 	}
 
-	/* assign a local call identifier or fail */
-#if 0
-	/* FIXME: Why that? ConnectionIdentifiers are not enough,
-	 * Or is this in case the user does not provide those parameters? */
-	endp->ci = generate_call_id(p->cfg);
-	if (endp->ci == CI_UNUSED)
-		goto error2;
-#endif
-	
 	/* Annotate Osmux circuit ID and set it to negotiating state until this
 	 * is fully set up from the dummy load. */
 	conn->osmux.state = OSMUX_STATE_DISABLED;
@@ -890,18 +644,15 @@ mgcp_header_done:
 		mgcp_set_audio_info(p->cfg, &conn->end.codec,
 				    PTYPE_UNDEFINED, endp->local_options.codec);
 
-#if 0
-	/* FIXME: Not sure if we still need this... */
-	if (p->cfg->bts_force_ptime) {
-		conn_bts->end.packet_duration_ms = p->cfg->bts_force_ptime;
-		conn_bts->end.force_output_ptime = 1;
+	if (p->cfg->force_ptime) {
+		conn->end.packet_duration_ms = p->cfg->force_ptime;
+		conn->end.force_output_ptime = 1;
 	}
-#endif
 
-	if (setup_rtp_processing(endp) != 0) {
+	if (setup_rtp_processing(endp, conn) != 0) {
 		LOGP(DLMGCP, LOGL_ERROR,
 		     "CRCX: endpoint:%x could not start RTP processing!\n",
-		     ENDPOINT_NUMBER(endp));		
+		     ENDPOINT_NUMBER(endp));
 		goto error2;
 	}
 
@@ -934,7 +685,7 @@ mgcp_header_done:
 	if (p->cfg->change_cb)
 		p->cfg->change_cb(tcfg, ENDPOINT_NUMBER(endp), MGCP_ENDP_CRCX);
 
-	if (endp->conn_mode & MGCP_CONN_RECV_ONLY
+	if (conn->conn->mode & MGCP_CONN_RECV_ONLY
 	    && tcfg->keepalive_interval != 0) {
 		send_dummy(endp, conn);
 	}
@@ -983,12 +734,12 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 
 		switch (line[0]) {
 		case 'C':
-			if (verify_call_id(endp, line + 3) != 0)
+			if (mgcp_verify_call_id(endp, line + 3) != 0)
 				goto error3;
 			break;
 		case 'I':
 			ci = (const char *)line + 3;
-			if (verify_ci(endp, ci) != 0)
+			if (mgcp_verify_ci(endp, ci) != 0)
 				goto error3;
 			break;
 		case 'L':
@@ -996,7 +747,6 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 			break;
 		case 'M':
 			mode = (const char *)line + 3;
-			endp->orig_mode = endp->conn_mode;
 			break;
 		case 'Z':
 			silent = strcmp("noanswer", line + 3) == 0;
@@ -1012,18 +762,18 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 			break;
 		}
 	}
-	
+
 mgcp_header_done:
 	conn_id = strtoul(ci, NULL, 10);
 	conn = mgcp_conn_get_rtp(&endp->conns, conn_id);
 	if (!conn)
 		return create_err_response(endp, 400, "MDCX", p->trans);
 
-	if (parse_conn_mode(mode, endp, conn) != 0) {
+	if (mgcp_parse_conn_mode(mode, endp, conn->conn) != 0) {
 		error_code = 517;
 		goto error3;
 	}
-	
+
 	if (have_sdp)
 		mgcp_parse_sdp_data(endp, &conn->end, p);
 
@@ -1034,7 +784,7 @@ mgcp_header_done:
 		mgcp_set_audio_info(p->cfg, &conn->end.codec,
 				    PTYPE_UNDEFINED, endp->local_options.codec);
 
-	if (setup_rtp_processing(endp) != 0)
+	if (setup_rtp_processing(endp, conn) != 0)
 		goto error3;
 
 	/* policy CB */
@@ -1074,7 +824,7 @@ mgcp_header_done:
 		p->cfg->change_cb(endp->tcfg, ENDPOINT_NUMBER(endp),
 				  MGCP_ENDP_MDCX);
 
-	if (endp->conn_mode & MGCP_CONN_RECV_ONLY &&
+	if (conn->conn->mode & MGCP_CONN_RECV_ONLY &&
 	    endp->tcfg->keepalive_interval != 0)
 		send_dummy(endp, conn);
 
@@ -1126,12 +876,12 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 
 		switch (line[0]) {
 		case 'C':
-			if (verify_call_id(endp, line + 3) != 0)
+			if (mgcp_verify_call_id(endp, line + 3) != 0)
 				goto error3;
 			break;
 		case 'I':
 			ci = (const char *)line + 3;
-			if (verify_ci(endp, ci) != 0)
+			if (mgcp_verify_ci(endp, ci) != 0)
 				goto error3;
 			break;
 		case 'Z':
@@ -1174,15 +924,15 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 	conn = mgcp_conn_get_rtp(&endp->conns, conn_id);
 	if (!conn)
 		goto error3;
-	
+
 	/* save the statistics of the current connection */
 	mgcp_format_stats(stats, sizeof(stats), conn->conn);
 
 	/* delete connection */
 	LOGP(DLMGCP, LOGL_DEBUG, "DLCX: endpoint:%x deleting conn:%s\n",
 	     ENDPOINT_NUMBER(endp), mgcp_conn_dump(conn->conn));
-	mgcp_conn_free(&endp->conns, conn_id);	
-	
+	mgcp_conn_free(&endp->conns, conn_id);
+
 	/* When all connections are closed, the endpoint will be released
 	 * in order to be ready to be used by another call. */
 	if (llist_count(&endp->conns) <= 0) {
@@ -1205,17 +955,26 @@ error3:
 
 out_silent:
 	LOGP(DLMGCP, LOGL_DEBUG, "DLCX: endpoint:%x silent exit\n",
-	     ENDPOINT_NUMBER(endp));	
+	     ENDPOINT_NUMBER(endp));
 	return NULL;
 }
 
 /* RSIP command handler, processes the received command */
 static struct msgb *handle_rsip(struct mgcp_parse_data *p)
 {
+	/* TODO: Also implement the resetting of a specific endpoint
+	 * to make mgcp_send_reset_ep() work. Currently this will call
+	 * mgcp_rsip_cb() in mgw_main.c, which sets reset_endpoints=1
+	 * to make read_call_agent() reset all endpoints when called
+	 * next time. In order to selectively reset endpoints some
+	 * mechanism to distinguish which endpoint shall be resetted
+	 * is needed */
+
 	LOGP(DLMGCP, LOGL_DEBUG, "RSIP: resetting all endpoints ...\n");
-	
+
 	if (p->found != 0) {
-		LOGP(DLMGCP, LOGL_ERROR, "RSIP: failed to find the endpoint.\n");
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "RSIP: failed to find the endpoint.\n");
 		return NULL;
 	}
 
@@ -1261,8 +1020,8 @@ static struct msgb *handle_noti_req(struct mgcp_parse_data *p)
 		res = p->cfg->rqnt_cb(p->endp, tone);
 
 	return res == 0 ?
-		create_ok_response(p->endp, 200, "RQNT", p->trans) :
-		create_err_response(p->endp, res, "RQNT", p->trans);
+	    create_ok_response(p->endp, 200, "RQNT", p->trans) :
+	    create_err_response(p->endp, res, "RQNT", p->trans);
 }
 
 /* Connection keepalive timer, will take care that dummy packets are send
@@ -1272,7 +1031,7 @@ static void mgcp_keepalive_timer_cb(void *_tcfg)
 	struct mgcp_trunk_config *tcfg = _tcfg;
 	struct mgcp_conn *conn;
 	int i;
-	
+
 	LOGP(DLMGCP, LOGL_DEBUG, "Triggered trunk %d keepalive timer.\n",
 	     tcfg->trunk_nr);
 
@@ -1284,14 +1043,15 @@ static void mgcp_keepalive_timer_cb(void *_tcfg)
 	for (i = 1; i < tcfg->number_endpoints; ++i) {
 		struct mgcp_endpoint *endp = &tcfg->endpoints[i];
 		llist_for_each_entry(conn, &endp->conns, entry) {
-			if (endp->conn_mode == MGCP_CONN_RECV_ONLY)
+			if (conn->mode == MGCP_CONN_RECV_ONLY)
 				send_dummy(endp, &conn->u.rtp);
 		}
 	}
 
 	LOGP(DLMGCP, LOGL_DEBUG, "Rescheduling trunk %d keepalive timer.\n",
 	     tcfg->trunk_nr);
-	osmo_timer_schedule(&tcfg->keepalive_timer, tcfg->keepalive_interval, 0);
+	osmo_timer_schedule(&tcfg->keepalive_timer, tcfg->keepalive_interval,
+			    0);
 }
 
 void mgcp_trunk_set_keepalive(struct mgcp_trunk_config *tcfg, int interval)
@@ -1307,7 +1067,7 @@ void mgcp_trunk_set_keepalive(struct mgcp_trunk_config *tcfg, int interval)
 }
 
 /*! \brief allocate configuration with default values.
- *  (called once at startup by main function) */ 
+ *  (called once at startup by main function) */
 struct mgcp_config *mgcp_config_alloc(void)
 {
 	struct mgcp_config *cfg;
@@ -1347,8 +1107,8 @@ struct mgcp_config *mgcp_config_alloc(void)
 
 /*! \brief allocate configuration with default values.
  *  (called once at startup by VTY)
- *  \param[in] cfg mgcp configuration 
- *  \param[in] nr trunk number 
+ *  \param[in] cfg mgcp configuration
+ *  \param[in] nr trunk number
  *  \returns pointer to allocated trunk configuration */
 struct mgcp_trunk_config *mgcp_trunk_alloc(struct mgcp_config *cfg, int nr)
 {
@@ -1375,16 +1135,16 @@ struct mgcp_trunk_config *mgcp_trunk_alloc(struct mgcp_config *cfg, int nr)
 }
 
 /*! \brief get trunk configuration by trunk number (index).
- *  \param[in] cfg mgcp configuration 
- *  \param[in] index trunk number 
+ *  \param[in] cfg mgcp configuration
+ *  \param[in] index trunk number
  *  \returns pointer to trunk configuration, NULL on error */
 struct mgcp_trunk_config *mgcp_trunk_num(struct mgcp_config *cfg, int index)
 {
 	struct mgcp_trunk_config *trunk;
 
 	llist_for_each_entry(trunk, &cfg->trunks, entry)
-		if (trunk->trunk_nr == index)
-			return trunk;
+	    if (trunk->trunk_nr == index)
+		return trunk;
 
 	return NULL;
 }
@@ -1399,8 +1159,9 @@ int mgcp_endpoints_allocate(struct mgcp_trunk_config *tcfg)
 
 	/* Initialize all endpoints */
 	tcfg->endpoints = _talloc_zero_array(tcfg->cfg,
-				       sizeof(struct mgcp_endpoint),
-				       tcfg->number_endpoints, "endpoints");
+					     sizeof(struct mgcp_endpoint),
+					     tcfg->number_endpoints,
+					     "endpoints");
 	if (!tcfg->endpoints)
 		return -1;
 
@@ -1414,7 +1175,7 @@ int mgcp_endpoints_allocate(struct mgcp_trunk_config *tcfg)
 }
 
 /*! \brief relase endpoint, all open connections are closed.
- *  \param[in] endp endpoint to release */ 
+ *  \param[in] endp endpoint to release */
 void mgcp_release_endp(struct mgcp_endpoint *endp)
 {
 	LOGP(DLMGCP, LOGL_DEBUG, "Releasing endpoint:%x\n",
@@ -1422,7 +1183,7 @@ void mgcp_release_endp(struct mgcp_endpoint *endp)
 
 	/* Normally this function should only be called wehen
 	 * all connections have been removed already. In case
-	 * that there are still connections open (e.g. when 
+	 * that there are still connections open (e.g. when
 	 * RSIP is executed), free them all at once. */
 	mgcp_conn_free_all(&endp->conns);
 
@@ -1434,7 +1195,6 @@ void mgcp_release_endp(struct mgcp_endpoint *endp)
 	talloc_free(endp->local_options.codec);
 	endp->local_options.codec = NULL;
 	endp->type = MGCP_RTP_DEFAULT;
-	endp->conn_mode = endp->orig_mode = MGCP_CONN_NONE;
 }
 
 static int send_agent(struct mgcp_config *cfg, const char *buf, int len)
@@ -1442,67 +1202,47 @@ static int send_agent(struct mgcp_config *cfg, const char *buf, int len)
 	return write(cfg->gw_fd.bfd.fd, buf, len);
 }
 
+/*! \brief Reset all endpoints by sending RSIP message to self
+ *  (called by VTY)
+ *  \param[in] endp trunk endpoint
+ *  \param[in] endpoint number
+ *  \returns 0 on success, -1 on error */
 int mgcp_send_reset_all(struct mgcp_config *cfg)
 {
+	int rc;
+
 	static const char mgcp_reset[] = {
-	    "RSIP 1 *@mgw MGCP 1.0\r\n"
+		"RSIP 1 *@mgw MGCP 1.0\r\n"
 	};
 
-	return send_agent(cfg, mgcp_reset, sizeof mgcp_reset -1);
+	rc = send_agent(cfg, mgcp_reset, sizeof mgcp_reset - 1);
+	if (rc <= 0)
+		return -1;
+
+	return 0;
 }
 
+/*! \brief Reset a single endpoint by sending RSIP message to self
+ *  (called by VTY)
+ *  \param[in] endp trunk endpoint
+ *  \param[in] endpoint number
+ *  \returns 0 on success, -1 on error */
 int mgcp_send_reset_ep(struct mgcp_endpoint *endp, int endpoint)
 {
 	char buf[128];
 	int len;
+	int rc;
 
 	len = snprintf(buf, sizeof(buf),
-			"RSIP 39 %x@mgw MGCP 1.0\r\n"
-			, endpoint);
+		       "RSIP 39 %x@mgw MGCP 1.0\r\n", endpoint);
 	if (len < 0)
-		return len;
+		return -1;
 
 	buf[sizeof(buf) - 1] = '\0';
 
-	return send_agent(endp->cfg, buf, len);
+	rc = send_agent(endp->cfg, buf, len);
+	if (rc <= 0)
+		return -1;
+
+	return 0;
 }
-
-static int setup_rtp_processing(struct mgcp_endpoint *endp)
-{
-	int rc = 0;
-	struct mgcp_config *cfg = endp->cfg;
-	struct mgcp_conn_rtp *conn_net = NULL;
-	struct mgcp_conn_rtp *conn_bts = NULL;
-
-	/* FIXME: This should be part of the connection */
-	if (endp->type != MGCP_RTP_DEFAULT) {
-		LOGP(DLMGCP, LOGL_NOTICE,
-		     "endpoint:%x RTP-setup: Endpoint is not configured as RTP default, stopping here!\n",
-		     ENDPOINT_NUMBER(endp));			
-		return 0;
-	}
-
-	/* FIXME: This should be part of the connection */
-	if (endp->conn_mode == MGCP_CONN_LOOPBACK) {
-		LOGP(DLMGCP, LOGL_NOTICE,
-		     "endpoint:%x RTP-setup: Endpoint is in loopback mode, stopping here!\n",
-		     ENDPOINT_NUMBER(endp));			
-		return 0;
-	}
-
-	/* FIXME: This is where things get complicated. We have to cross two connections here,
-	 * So there has to be some way to determine those two connections from the endpoint list.
-	 * This could be done by just traversing the list. Once we get to, we go for SEND/RECEIVE */
-
-	if (endp->conn_mode & MGCP_CONN_SEND_ONLY)
-		rc |= cfg->setup_rtp_processing_cb(endp, &conn_net->end, &conn_bts->end);
-	else
-		rc |= cfg->setup_rtp_processing_cb(endp, &conn_net->end, NULL);
-
-	if (endp->conn_mode & MGCP_CONN_RECV_ONLY)
-		rc |= cfg->setup_rtp_processing_cb(endp, &conn_bts->end, &conn_net->end);
-	else
-		rc |= cfg->setup_rtp_processing_cb(endp, &conn_bts->end, NULL);
-	return rc;
-}
-

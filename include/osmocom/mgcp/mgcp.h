@@ -192,7 +192,7 @@ struct mgcp_config {
 	struct mgcp_port_range net_ports;
 	int endp_dscp;
 
-	int bts_force_ptime;
+	int force_ptime;
 
 	mgcp_change change_cb;
 	mgcp_policy policy_cb;

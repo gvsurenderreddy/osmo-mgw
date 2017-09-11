@@ -22,6 +22,7 @@
  */
 
 #include <osmocom/mgcp/mgcp_conn.h>
+#include <osmocom/mgcp/mgcp_common.h>
 
 /* Reset codec state and free memory */
 static void mgcp_rtp_codec_reset(struct mgcp_rtp_codec *codec)
@@ -31,14 +32,13 @@ static void mgcp_rtp_codec_reset(struct mgcp_rtp_codec *codec)
 	codec->audio_name = NULL;
 	codec->frame_duration_num = DEFAULT_RTP_AUDIO_FRAME_DUR_NUM;
 	codec->frame_duration_den = DEFAULT_RTP_AUDIO_FRAME_DUR_DEN;
-	codec->rate               = DEFAULT_RTP_AUDIO_DEFAULT_RATE;
-	codec->channels           = DEFAULT_RTP_AUDIO_DEFAULT_CHANNELS;
+	codec->rate = DEFAULT_RTP_AUDIO_DEFAULT_RATE;
+	codec->channels = DEFAULT_RTP_AUDIO_DEFAULT_CHANNELS;
 
 	/* see also mgcp_sdp.c, mgcp_set_audio_info() */
 	talloc_free(codec->subtype_name);
 	talloc_free(codec->audio_name);
 }
-
 
 /* Reset states, free memory, set defaults and reset codec state */
 static void mgcp_rtp_end_reset(struct mgcp_rtp_end *end)
@@ -51,18 +51,18 @@ static void mgcp_rtp_end_reset(struct mgcp_rtp_end *end)
 	end->packets_tx = 0;
 	end->octets_tx = 0;
 	end->dropped_packets = 0;
-	end->rtp_port =end->rtcp_port = 0;
+	end->rtp_port = end->rtcp_port = 0;
 	talloc_free(end->fmtp_extra);
 	end->fmtp_extra = NULL;
 	end->rtp_process_data = NULL;
 
 	/* See also mgcp_transcode.c, mgcp_transcoding_setup() */
 	talloc_free(end->rtp_process_data);
-	
+
 	/* Set default values */
-	end->frames_per_packet  = 0; /* unknown */
+	end->frames_per_packet = 0;	/* unknown */
 	end->packet_duration_ms = DEFAULT_RTP_AUDIO_PACKET_DURATION_MS;
-	end->output_enabled	= 0;
+	end->output_enabled = 0;
 
 	mgcp_rtp_codec_reset(&end->codec);
 	mgcp_rtp_codec_reset(&end->alt_codec);
@@ -96,11 +96,13 @@ struct mgcp_conn *mgcp_conn_alloc(void *ctx, struct llist_head *conns,
 	if (!conn)
 		return NULL;
 	conn->type = type;
+	conn->mode = MGCP_CONN_NONE;
+	conn->mode_orig = MGCP_CONN_NONE;
 	conn->id = id;
 	conn->u.rtp.conn = conn;
 	strcpy(conn->name, name);
 
-	switch(type) {
+	switch (type) {
 	case MGCP_CONN_TYPE_RTP:
 		conn->u.rtp.osmux.allocated_cid = -1;
 		conn->u.rtp.end.rtp.fd = -1;
@@ -174,7 +176,7 @@ struct mgcp_conn_rtp *mgcp_conn_get_rtp_by_fd(struct llist_head *conns,
 {
 	OSMO_ASSERT(conns);
 	OSMO_ASSERT(conns->next != NULL && conns->prev != NULL);
-	
+
 	struct mgcp_conn *conn;
 	struct mgcp_conn_rtp *conn_rtp;
 
@@ -203,7 +205,7 @@ void mgcp_conn_free(struct llist_head *conns, uint32_t id)
 	if (!conn)
 		return;
 
-	switch(conn->type) {
+	switch (conn->type) {
 	case MGCP_CONN_TYPE_RTP:
 		osmux_disable_conn(&conn->u.rtp);
 		osmux_release_cid(&conn->u.rtp);
@@ -216,7 +218,6 @@ void mgcp_conn_free(struct llist_head *conns, uint32_t id)
 		OSMO_ASSERT(false)
 	}
 
-	
 	llist_del(&conn->entry);
 	talloc_free(conn);
 }

@@ -1,5 +1,5 @@
 /* A Media Gateway Control Protocol Media Gateway: RFC 3435 */
-/* Message parser/generator */
+/* Message parser/generator utilities */
 
 /*
  * (C) 2009-2012 by Holger Hans Peter Freyther <zecke@selfish.org>
@@ -22,3 +22,18 @@
  */
 
 #pragma once
+
+void mgcp_disp_msg(unsigned char *message, unsigned int len, char *preamble);
+
+int mgcp_parse_conn_mode(const char *msg, struct mgcp_endpoint *endp,
+			 struct mgcp_conn *conn);
+
+int mgcp_parse_header(struct mgcp_parse_data *pdata, char *data);
+
+int mgcp_parse_osmux_cid(const char *line);
+
+int mgcp_check_param(const struct mgcp_endpoint *endp, const char *line);
+
+int mgcp_verify_call_id(struct mgcp_endpoint *endp, const char *callid);
+
+int mgcp_verify_ci(struct mgcp_endpoint *endp, const char *ci);

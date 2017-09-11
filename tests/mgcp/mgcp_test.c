@@ -501,6 +501,7 @@ static void test_values(void)
 
 static void test_messages(void)
 {
+#if 0
 	struct mgcp_config *cfg;
 	struct mgcp_endpoint *endp;
 	int i;
@@ -631,6 +632,7 @@ static void test_messages(void)
 	}
 
 	talloc_free(cfg);
+#endif
 }
 
 static void test_retransmission(void)
@@ -1207,6 +1209,7 @@ static void test_no_cycle(void)
 
 static void test_no_name(void)
 {
+#if 0
 	struct mgcp_config *cfg;
 	struct mgcp_endpoint *endp;
 	struct msgb *inp, *msg;
@@ -1246,6 +1249,7 @@ static void test_no_name(void)
 
 	mgcp_release_endp(&cfg->trunk.endpoints[1]);
 	talloc_free(cfg);
+#endif
 }
 
 static void test_osmux_cid(void)

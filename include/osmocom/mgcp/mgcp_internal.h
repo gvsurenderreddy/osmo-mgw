@@ -189,6 +189,12 @@ struct mgcp_conn {
 	/*!< type of the connection (union) */
 	enum mgcp_conn_type type;
 
+	/*!< mode of the connection */
+	int mode;
+
+	/*!< copy of the mode to restore the original setting (VTY) */
+	int mode_orig;
+
 	/*!< connection id to identify the conntion */
 	uint32_t id;
 
@@ -207,8 +213,6 @@ struct mgcp_conn {
 struct mgcp_endpoint {
 	char *callid;
 	struct mgcp_lco local_options;
-	int conn_mode;
-	int orig_mode;
 
 	struct llist_head conns;
 
