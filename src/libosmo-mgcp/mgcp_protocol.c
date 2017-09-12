@@ -1122,6 +1122,10 @@ struct mgcp_config *mgcp_config_alloc(void)
 		return NULL;
 	}
 
+	cfg->net_ports.range_start = RTP_PORT_DEFAULT_RANGE_START;
+	cfg->net_ports.range_end = RTP_PORT_DEFAULT_RANGE_END;
+	cfg->net_ports.last_port = cfg->net_ports.range_start;
+
 	cfg->source_port = 2427;
 	cfg->source_addr = talloc_strdup(cfg, "0.0.0.0");
 	cfg->osmux_addr = talloc_strdup(cfg, "0.0.0.0");
