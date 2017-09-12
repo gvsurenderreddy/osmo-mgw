@@ -227,45 +227,6 @@ struct mgcp_endpoint {
 	char *last_response;
 };
 
-#define for_each_line(line, save)			\
-	for (line = strline_r(NULL, &save); line;\
-	     line = strline_r(NULL, &save))
-
-#define for_each_non_empty_line(line, save)			\
-	for (line = strtok_r(NULL, "\r\n", &save); line;\
-	     line = strtok_r(NULL, "\r\n", &save))
-
-/* TODO: REPLACED, REMOVE */
-static inline char *strline_r(char *str, char **saveptr)
-{
-	char *result;
-
-	if (str)
-		*saveptr = str;
-
-	result = *saveptr;
-
-	if (*saveptr != NULL) {
-		*saveptr = strpbrk(*saveptr, "\r\n");
-
-		if (*saveptr != NULL) {
-			char *eos = *saveptr;
-
-			if ((*saveptr)[0] == '\r' && (*saveptr)[1] == '\n')
-				(*saveptr)++;
-			(*saveptr)++;
-			if ((*saveptr)[0] == '\0')
-				*saveptr = NULL;
-
-			*eos = '\0';
-		}
-	}
-
-	return result;
-}
-
-
-
 #define ENDPOINT_NUMBER(endp) abs((int)(endp - endp->tcfg->endpoints))
 
 /**

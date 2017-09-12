@@ -342,3 +342,41 @@ int mgcp_verify_ci(struct mgcp_endpoint *endp, const char *ci)
 
 	return -1;
 }
+
+/*! \brief Extract individual lines from MCGP message
+  * \param[in] str MGCP message string, consisting of multiple lines
+  * \param{in] saveptr pointer to next line in str
+  * \returns line, NULL when done */
+char *mgcp_strline(char *str, char **saveptr)
+{
+	char *result;
+
+	/*! The function must be called with *str set to the input string
+	 *  for the first line. After that saveptr will be initalized.
+	 *  all consecutive lines are extracted by calling the function
+	 *  with str set to NULL. When done, the function will return NULL
+	 *  to indicate that all lines have been parsed. */
+
+	if (str)
+		*saveptr = str;
+
+	result = *saveptr;
+
+	if (*saveptr != NULL) {
+		*saveptr = strpbrk(*saveptr, "\r\n");
+
+		if (*saveptr != NULL) {
+			char *eos = *saveptr;
+
+			if ((*saveptr)[0] == '\r' && (*saveptr)[1] == '\n')
+				(*saveptr)++;
+			(*saveptr)++;
+			if ((*saveptr)[0] == '\0')
+				*saveptr = NULL;
+
+			*eos = '\0';
+		}
+	}
+
+	return result;
+}

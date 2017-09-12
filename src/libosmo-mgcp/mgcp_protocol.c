@@ -346,7 +346,7 @@ struct msgb *mgcp_handle_message(struct mgcp_config *cfg, struct msgb *msg)
 	 */
 	memset(&pdata, 0, sizeof(pdata));
 	pdata.cfg = cfg;
-	data = strline_r((char *)msg->l3h, &pdata.save);
+	data = mgcp_strline((char *)msg->l3h, &pdata.save);
 	pdata.found = mgcp_parse_header(&pdata, data);
 	if (pdata.endp && pdata.trans
 	    && pdata.endp->last_trans
