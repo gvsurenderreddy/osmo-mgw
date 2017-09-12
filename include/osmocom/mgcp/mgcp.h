@@ -179,10 +179,7 @@ struct mgcp_config {
 	int source_port;
 	char *local_ip;
 	char *source_addr;
-	char *bts_ip;
 	char *call_agent_addr;
-
-	struct in_addr bts_in;
 
 	/* RTP processing */
 	mgcp_processing rtp_processing_cb;
@@ -192,7 +189,6 @@ struct mgcp_config {
 
 	struct osmo_wqueue gw_fd;
 
-	struct mgcp_port_range bts_ports;
 	struct mgcp_port_range net_ports;
 	int endp_dscp;
 
