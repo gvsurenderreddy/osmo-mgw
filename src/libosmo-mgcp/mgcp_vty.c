@@ -1281,12 +1281,6 @@ int mgcp_parse_config(const char *config_file, struct mgcp_config *cfg,
 		return -1;
 	}
 
-	/* initialize the last ports */
-	g_cfg->last_bts_port =
-	    rtp_calculate_port(0, g_cfg->bts_ports.base_port);
-	g_cfg->last_net_port =
-	    rtp_calculate_port(0, g_cfg->net_ports.base_port);
-
 	if (allocate_trunk(&g_cfg->trunk) != 0) {
 		LOGP(DLMGCP, LOGL_ERROR,
 		     "Failed to initialize the virtual trunk.\n");

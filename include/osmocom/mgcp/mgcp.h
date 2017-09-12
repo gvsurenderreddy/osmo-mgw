@@ -211,10 +211,6 @@ struct mgcp_config {
 	struct mgcp_trunk_config trunk;
 	struct llist_head trunks;
 
-	/* only used for start with a static configuration */
-	int last_net_port;
-	int last_bts_port;
-
 	enum mgcp_role role;
 
 	/* osmux translator: 0 means disabled, 1 means enabled */
