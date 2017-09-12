@@ -33,9 +33,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#define RTP_PORT_DEFAULT 4000
-#define RTP_PORT_NET_DEFAULT 16000
-
 /**
  * Calculate the RTP audio port for the given multiplex
  * and the direction. This allows a semi static endpoint
