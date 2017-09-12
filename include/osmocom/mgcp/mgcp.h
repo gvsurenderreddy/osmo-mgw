@@ -109,20 +109,12 @@ typedef void (*mgcp_get_format)(struct mgcp_endpoint *endp,
 				const char**fmtp_extra,
 				struct mgcp_conn_rtp *conn);
 
-#define PORT_ALLOC_STATIC	0
-#define PORT_ALLOC_DYNAMIC	1
-
 /**
  * This holds information on how to allocate ports
  */
 struct mgcp_port_range {
-	int mode;
-
 	/* addr or NULL to fall-back to default */
 	char *bind_addr;
-
-	/* pre-allocated from a base? */
-	int base_port;
 
 	/* dynamically allocated */
 	int range_start;

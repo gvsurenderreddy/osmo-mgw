@@ -276,16 +276,8 @@ DEFUN(cfg_mgcp_bind_early,
 	return CMD_WARNING;
 }
 
-static void parse_base(struct mgcp_port_range *range, const char **argv)
-{
-	unsigned int port = atoi(argv[0]);
-	range->mode = PORT_ALLOC_STATIC;
-	range->base_port = port;
-}
-
 static void parse_range(struct mgcp_port_range *range, const char **argv)
 {
-	range->mode = PORT_ALLOC_DYNAMIC;
 	range->range_start = atoi(argv[0]);
 	range->range_end = atoi(argv[1]);
 	range->last_port = g_cfg->net_ports.range_start;
@@ -304,14 +296,6 @@ DEFUN(cfg_mgcp_rtp_net_range,
       RANGE_START_STR RANGE_END_STR)
 {
 	parse_range(&g_cfg->net_ports, argv);
-	return CMD_SUCCESS;
-}
-
-DEFUN(cfg_mgcp_rtp_net_base_port,
-      cfg_mgcp_rtp_net_base_port_cmd,
-      "rtp net-base <0-65534>", RTP_STR NET_START_STR UDP_PORT_STR)
-{
-	parse_base(&g_cfg->net_ports, argv);
 	return CMD_SUCCESS;
 }
 
@@ -1171,7 +1155,6 @@ int mgcp_vty_init(void)
 	install_element(MGCP_NODE, &cfg_mgcp_bind_ip_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_bind_port_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_bind_early_cmd);
-	install_element(MGCP_NODE, &cfg_mgcp_rtp_net_base_port_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_rtp_net_range_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_rtp_net_bind_ip_cmd);
 	install_element(MGCP_NODE, &cfg_mgcp_rtp_no_net_bind_ip_cmd);

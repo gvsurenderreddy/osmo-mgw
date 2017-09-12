@@ -1126,8 +1126,6 @@ struct mgcp_config *mgcp_config_alloc(void)
 	cfg->source_addr = talloc_strdup(cfg, "0.0.0.0");
 	cfg->osmux_addr = talloc_strdup(cfg, "0.0.0.0");
 
-	cfg->net_ports.base_port = RTP_PORT_NET_DEFAULT;
-
 	cfg->rtp_processing_cb = &mgcp_rtp_processing_default;
 	cfg->setup_rtp_processing_cb = &mgcp_setup_rtp_processing_default;
 
