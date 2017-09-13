@@ -380,3 +380,20 @@ char *mgcp_strline(char *str, char **saveptr)
 
 	return result;
 }
+
+/*! \brief Parse CI from a given string
+  * \param[out] caller provided memory to store the result
+  * \param{in] string containing the connection id
+  * \returns 0 on success, -1 on error */
+int mgcp_parse_ci(uint32_t *conn_id, const char *ci)
+{
+
+	OSMO_ASSERT(conn_id);
+
+	if (!ci)
+		return -1;
+
+	*conn_id = strtoul(ci, NULL, 10);
+
+	return 0;
+}

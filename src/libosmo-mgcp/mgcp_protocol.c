@@ -628,7 +628,8 @@ mgcp_header_done:
 	set_local_cx_options(endp->tcfg->endpoints, &endp->local_options,
 			     local_options);
 
-	conn_id = strtoul(ci, NULL, 10);
+	if (mgcp_parse_ci(&conn_id, ci))
+		return create_err_response(endp, 400, "CRCX", p->trans);
 
 	/* Only accept another connection when the connection ID is different. */
 	if (mgcp_conn_get_rtp(&endp->conns, conn_id)) {
@@ -808,7 +809,9 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 	}
 
 mgcp_header_done:
-	conn_id = strtoul(ci, NULL, 10);
+	if (mgcp_parse_ci(&conn_id, ci))
+		return create_err_response(endp, 400, "MDCX", p->trans);
+
 	conn = mgcp_conn_get_rtp(&endp->conns, conn_id);
 	if (!conn)
 		return create_err_response(endp, 400, "MDCX", p->trans);
@@ -830,6 +833,7 @@ mgcp_header_done:
 
 	if (setup_rtp_processing(endp, conn) != 0)
 		goto error3;
+
 
 	/* policy CB */
 	if (p->cfg->policy_cb) {
@@ -963,8 +967,9 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 		}
 	}
 
-	/* free the connection */
-	conn_id = strtoul(ci, NULL, 10);
+	/* find the connection */
+	if (mgcp_parse_ci(&conn_id, ci))
+		return create_err_response(endp, 400, "DLCX", p->trans);
 	conn = mgcp_conn_get_rtp(&endp->conns, conn_id);
 	if (!conn)
 		goto error3;

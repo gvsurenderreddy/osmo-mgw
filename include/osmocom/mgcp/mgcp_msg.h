@@ -47,3 +47,5 @@ char *mgcp_strline(char *str, char **saveptr);
 #define for_each_non_empty_line(line, save)\
 	for (line = strtok_r(NULL, "\r\n", &save); line;\
 	     line = strtok_r(NULL, "\r\n", &save))
+
+int mgcp_parse_ci(uint32_t *conn_id, const char *ci);
