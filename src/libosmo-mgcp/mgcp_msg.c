@@ -78,8 +78,12 @@ int mgcp_parse_conn_mode(const char *mode, struct mgcp_endpoint *endp,
 {
 	int ret = 0;
 
-	if (!mode)
+	if (!mode) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "endpoint:%x missing connection mode\n",
+		     ENDPOINT_NUMBER(endp));
 		return -1;
+	}
 	if (!conn)
 		return -1;
 	if (!endp)
