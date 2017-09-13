@@ -824,10 +824,13 @@ mgcp_header_done:
 	if (!conn)
 		return create_err_response(endp, 400, "MDCX", p->trans);
 
-	if (mgcp_parse_conn_mode(mode, endp, conn->conn) != 0) {
-		error_code = 517;
-		goto error3;
-	}
+	if (mode) {
+		if (mgcp_parse_conn_mode(mode, endp, conn->conn) != 0) {
+			error_code = 517;
+			goto error3;
+		}
+	} else
+			conn->conn->mode = conn->conn->mode_orig;
 
 	if (have_sdp)
 		mgcp_parse_sdp_data(endp, &conn->end, p);
