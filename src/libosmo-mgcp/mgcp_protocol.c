@@ -248,7 +248,7 @@ static int write_response_sdp(struct mgcp_endpoint *endp,
 	}
 	if (conn->end.packet_duration_ms > 0 && endp->tcfg->audio_send_ptime) {
 		nchars = snprintf(sdp_record + len, size - len,
-				  "a=ptime:%d\r\n",
+				  "a=ptime:%u\r\n",
 				  conn->end.packet_duration_ms);
 		if (nchars < 0 || nchars >= size - len)
 			goto buffer_too_small;
