@@ -997,6 +997,9 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 	LOGP(DLMGCP, LOGL_DEBUG, "DLCX: endpoint:%x deleting conn:%s\n",
 	     ENDPOINT_NUMBER(endp), mgcp_conn_dump(conn->conn));
 	mgcp_conn_free(&endp->conns, conn_id);
+	LOGP(DLMGCP, LOGL_NOTICE,
+	     "DLCX: endpoint:%x connection successfully deleted\n",
+	     ENDPOINT_NUMBER(endp));
 
 	/* When all connections are closed, the endpoint will be released
 	 * in order to be ready to be used by another call. */
