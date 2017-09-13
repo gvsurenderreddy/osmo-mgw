@@ -374,7 +374,7 @@ struct msgb *mgcp_handle_message(struct mgcp_config *cfg, struct msgb *msg)
 /* AUEP command handler, processes the received command */
 static struct msgb *handle_audit_endpoint(struct mgcp_parse_data *p)
 {
-	LOGP(DLMGCP, LOGL_DEBUG, "AUEP: auditing endpoint ...\n");
+	LOGP(DLMGCP, LOGL_NOTICE, "AUEP: auditing endpoint ...\n");
 
 	if (p->found != 0) {
 		LOGP(DLMGCP, LOGL_ERROR,
@@ -518,7 +518,7 @@ static struct msgb *handle_create_con(struct mgcp_parse_data *p)
 	uint32_t conn_id;
 	char conn_name[512];
 
-	LOGP(DLMGCP, LOGL_DEBUG, "CRCX: creating new connection ...\n");
+	LOGP(DLMGCP, LOGL_NOTICE, "CRCX: creating new connection ...\n");
 
 	if (p->found != 0)
 		return create_err_response(NULL, 510, "CRCX", p->trans);
@@ -765,7 +765,7 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 	struct mgcp_conn_rtp *conn = NULL;
 	uint32_t conn_id;
 
-	LOGP(DLMGCP, LOGL_DEBUG, "MDCX: modifying existing connection ...\n");
+	LOGP(DLMGCP, LOGL_NOTICE, "MDCX: modifying existing connection ...\n");
 
 	if (p->found != 0)
 		return create_err_response(NULL, 510, "MDCX", p->trans);
@@ -915,7 +915,7 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 	struct mgcp_conn_rtp *conn = NULL;
 	uint32_t conn_id;
 
-	LOGP(DLMGCP, LOGL_DEBUG,
+	LOGP(DLMGCP, LOGL_NOTICE,
 	     "DLCX: endpoint:%x deleting connection ...\n",
 	     ENDPOINT_NUMBER(endp));
 
@@ -1038,7 +1038,7 @@ static struct msgb *handle_rsip(struct mgcp_parse_data *p)
 	 * mechanism to distinguish which endpoint shall be resetted
 	 * is needed */
 
-	LOGP(DLMGCP, LOGL_DEBUG, "RSIP: resetting all endpoints ...\n");
+	LOGP(DLMGCP, LOGL_NOTICE, "RSIP: resetting all endpoints ...\n");
 
 	if (p->found != 0) {
 		LOGP(DLMGCP, LOGL_ERROR,
@@ -1068,6 +1068,8 @@ static struct msgb *handle_noti_req(struct mgcp_parse_data *p)
 	int res = 0;
 	char *line;
 	char tone = CHAR_MAX;
+
+	LOGP(DLMGCP, LOGL_NOTICE, "RQNT: processing request for notification ...\n");
 
 	if (p->found != 0)
 		return create_err_response(NULL, 400, "RQNT", p->trans);
