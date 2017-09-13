@@ -628,8 +628,12 @@ mgcp_header_done:
 	set_local_cx_options(endp->tcfg->endpoints, &endp->local_options,
 			     local_options);
 
-	if (mgcp_parse_ci(&conn_id, ci))
+	if (mgcp_parse_ci(&conn_id, ci)) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "CRCX: endpoint:%x insufficient parameters, missing ci (connectionIdentifier)\n",
+		     ENDPOINT_NUMBER(endp));
 		return create_err_response(endp, 400, "CRCX", p->trans);
+	}
 
 	/* Only accept another connection when the connection ID is different. */
 	if (mgcp_conn_get_rtp(&endp->conns, conn_id)) {
@@ -809,8 +813,12 @@ static struct msgb *handle_modify_con(struct mgcp_parse_data *p)
 	}
 
 mgcp_header_done:
-	if (mgcp_parse_ci(&conn_id, ci))
+	if (mgcp_parse_ci(&conn_id, ci)) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "MDCX: endpoint:%x insufficient parameters, missing ci (connectionIdentifier)\n",
+		     ENDPOINT_NUMBER(endp));
 		return create_err_response(endp, 400, "MDCX", p->trans);
+	}
 
 	conn = mgcp_conn_get_rtp(&endp->conns, conn_id);
 	if (!conn)
@@ -968,8 +976,13 @@ static struct msgb *handle_delete_con(struct mgcp_parse_data *p)
 	}
 
 	/* find the connection */
-	if (mgcp_parse_ci(&conn_id, ci))
+	if (mgcp_parse_ci(&conn_id, ci)) {
+		LOGP(DLMGCP, LOGL_ERROR,
+		     "DLCX: endpoint:%x insufficient parameters, missing ci (connectionIdentifier)\n",
+		     ENDPOINT_NUMBER(endp));
 		return create_err_response(endp, 400, "DLCX", p->trans);
+	}
+
 	conn = mgcp_conn_get_rtp(&endp->conns, conn_id);
 	if (!conn)
 		goto error3;
