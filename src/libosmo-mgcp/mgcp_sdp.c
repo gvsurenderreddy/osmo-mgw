@@ -1,5 +1,5 @@
 /*
- * Some SDP file parsing...
+ * SDP generation and parsing
  *
  * (C) 2009-2015 by Holger Hans Peter Freyther <zecke@selfish.org>
  * (C) 2009-2014 by On-Waves
@@ -38,6 +38,12 @@ struct sdp_rtp_map {
 	int channels;
 };
 
+/*! \brief set codec configuration depending on payload type and codec name
+ *  \endp[in] ctx talloc context
+ *  \endp[out] codec configuration (caller provided memory)
+ *  \endp[in] payload_type codec type id (e.g. 3 for GSM, -1 when undefined)
+ *  \endp[in] audio_name audio codec name (e.g. "GSM/8000/1")
+ *  \returns 0 on success, -1 on failure */
 int mgcp_set_audio_info(void *ctx, struct mgcp_rtp_codec *codec,
 			int payload_type, const char *audio_name)
 {
@@ -55,15 +61,23 @@ int mgcp_set_audio_info(void *ctx, struct mgcp_rtp_codec *codec,
 
 	if (!audio_name) {
 		switch (payload_type) {
-		case 0: audio_name = "PCMU/8000/1"; break;
-		case 3: audio_name = "GSM/8000/1"; break;
-		case 8: audio_name = "PCMA/8000/1"; break;
-		case 18: audio_name = "G729/8000/1"; break;
+		case 0:
+			audio_name = "PCMU/8000/1";
+			break;
+		case 3:
+			audio_name = "GSM/8000/1";
+			break;
+		case 8:
+			audio_name = "PCMA/8000/1";
+			break;
+		case 18:
+			audio_name = "G729/8000/1";
+			break;
 		default:
-			 /* Payload type is unknown, don't change rate and
-			  * channels. */
-			 /* TODO: return value? */
-			 return 0;
+			/* Payload type is unknown, don't change rate and
+			 * channels. */
+			/* TODO: return value? */
+			return 0;
 		}
 	}
 
@@ -107,7 +121,7 @@ int mgcp_set_audio_info(void *ctx, struct mgcp_rtp_codec *codec,
 	return 0;
 }
 
-void codecs_initialize(void *ctx, struct sdp_rtp_map *codecs, int used)
+static void codecs_initialize(void *ctx, struct sdp_rtp_map *codecs, int used)
 {
 	int i;
 
@@ -137,7 +151,8 @@ void codecs_initialize(void *ctx, struct sdp_rtp_map *codecs, int used)
 	}
 }
 
-void codecs_update(void *ctx, struct sdp_rtp_map *codecs, int used, int payload, char *audio_name)
+static void codecs_update(void *ctx, struct sdp_rtp_map *codecs, int used,
+			  int payload, char *audio_name)
 {
 	int i;
 
@@ -148,8 +163,9 @@ void codecs_update(void *ctx, struct sdp_rtp_map *codecs, int used, int payload,
 		if (codecs[i].payload_type != payload)
 			continue;
 		if (sscanf(audio_name, "%63[^/]/%d/%d",
-				audio_codec, &rate, &channels) < 1) {
-			LOGP(DLMGCP, LOGL_ERROR, "Failed to parse '%s'\n", audio_name);
+			   audio_codec, &rate, &channels) < 1) {
+			LOGP(DLMGCP, LOGL_ERROR, "Failed to parse '%s'\n",
+			     audio_name);
 			continue;
 		}
 
@@ -160,29 +176,35 @@ void codecs_update(void *ctx, struct sdp_rtp_map *codecs, int used, int payload,
 		return;
 	}
 
-	LOGP(DLMGCP, LOGL_ERROR, "Unconfigured PT(%d) with %s\n", payload, audio_name);
+	LOGP(DLMGCP, LOGL_ERROR, "Unconfigured PT(%d) with %s\n", payload,
+	     audio_name);
 }
 
-int is_codec_compatible(struct mgcp_endpoint *endp, struct sdp_rtp_map *codec)
+/* Check if the codec matches what is set up in the trunk config */
+static int is_codec_compatible(struct mgcp_endpoint *endp,
+			       struct sdp_rtp_map *codec)
 {
-	char *bts_codec;
+	char *codec_str;
 	char audio_codec[64];
 
 	if (!codec->codec_name)
 		return 0;
 
-	/*
-	 * GSM, GSM/8000 and GSM/8000/1 should all be compatible.. let's go
-	 * by name first.
-	 */
-	bts_codec = endp->tcfg->audio_name;
-	if (sscanf(bts_codec, "%63[^/]/%*d/%*d", audio_codec) < 1)
+	/* GSM, GSM/8000 and GSM/8000/1 should all be compatible...
+	 * let's go by name first. */
+	codec_str = endp->tcfg->audio_name;
+	if (sscanf(codec_str, "%63[^/]/%*d/%*d", audio_codec) < 1)
 		return 0;
-
 	return strcasecmp(audio_codec, codec->codec_name) == 0;
 }
 
-int mgcp_parse_sdp_data(struct mgcp_endpoint *endp, struct mgcp_rtp_end *rtp, struct mgcp_parse_data *p)
+/*! \brief analyze SDP input string
+ *  \endp[in] endp trunk endpoint
+ *  \endp[in] conn associated rtp connection
+ *  \endp[in] caller provided memory to store the parsing results
+ *  \returns 0 on success, -1 on failure */
+int mgcp_parse_sdp_data(struct mgcp_endpoint *endp, struct mgcp_conn_rtp *conn,
+			struct mgcp_parse_data *p)
 {
 	struct sdp_rtp_map codecs[10];
 	int codecs_used = 0;
@@ -191,7 +213,13 @@ int mgcp_parse_sdp_data(struct mgcp_endpoint *endp, struct mgcp_rtp_end *rtp, st
 	int i;
 	int codecs_assigned = 0;
 	void *tmp_ctx = talloc_new(NULL);
+	struct mgcp_rtp_end *rtp;
 
+	OSMO_ASSERT(endp);
+	OSMO_ASSERT(conn);
+	OSMO_ASSERT(p);
+
+	rtp = &conn->end;
 	memset(&codecs, 0, sizeof(codecs));
 
 	for_each_line(line, p->save) {
@@ -202,62 +230,69 @@ int mgcp_parse_sdp_data(struct mgcp_endpoint *endp, struct mgcp_rtp_end *rtp, st
 		case 'v':
 			/* skip these SDP attributes */
 			break;
-		case 'a': {
-			int payload;
-			int ptime, ptime2 = 0;
-			char audio_name[64];
+		case 'a':{
+				int payload;
+				int ptime, ptime2 = 0;
+				char audio_name[64];
 
-
-			if (sscanf(line, "a=rtpmap:%d %63s",
-				   &payload, audio_name) == 2) {
-				codecs_update(tmp_ctx, codecs, codecs_used, payload, audio_name);
-			} else if (sscanf(line, "a=ptime:%d-%d",
-					  &ptime, &ptime2) >= 1) {
-				if (ptime2 > 0 && ptime2 != ptime)
-					rtp->packet_duration_ms = 0;
-				else
-					rtp->packet_duration_ms = ptime;
-			} else if (sscanf(line, "a=maxptime:%d", &ptime2) == 1) {
-				maxptime = ptime2;
+				if (sscanf(line, "a=rtpmap:%d %63s",
+					   &payload, audio_name) == 2) {
+					codecs_update(tmp_ctx, codecs,
+						      codecs_used, payload,
+						      audio_name);
+				} else
+				    if (sscanf
+					(line, "a=ptime:%d-%d", &ptime,
+					 &ptime2) >= 1) {
+					if (ptime2 > 0 && ptime2 != ptime)
+						rtp->packet_duration_ms = 0;
+					else
+						rtp->packet_duration_ms = ptime;
+				} else
+				    if (sscanf(line, "a=maxptime:%d", &ptime2)
+					== 1) {
+					maxptime = ptime2;
+				}
+				break;
 			}
-			break;
-		}
-		case 'm': {
-			int port, rc;
+		case 'm':{
+				int port, rc;
 
-			rc = sscanf(line, "m=audio %d RTP/AVP %d %d %d %d %d %d %d %d %d %d",
-					&port,
-					&codecs[0].payload_type,
-					&codecs[1].payload_type,
-					&codecs[2].payload_type,
-					&codecs[3].payload_type,
-					&codecs[4].payload_type,
-					&codecs[5].payload_type,
-					&codecs[6].payload_type,
-					&codecs[7].payload_type,
-					&codecs[8].payload_type,
-					&codecs[9].payload_type);
-			if (rc >= 2) {
-				rtp->rtp_port = htons(port);
-				rtp->rtcp_port = htons(port + 1);
-				codecs_used = rc - 1;
-				codecs_initialize(tmp_ctx, codecs, codecs_used);
+				rc = sscanf(line,
+					    "m=audio %d RTP/AVP %d %d %d %d %d %d %d %d %d %d",
+					    &port, &codecs[0].payload_type,
+					    &codecs[1].payload_type,
+					    &codecs[2].payload_type,
+					    &codecs[3].payload_type,
+					    &codecs[4].payload_type,
+					    &codecs[5].payload_type,
+					    &codecs[6].payload_type,
+					    &codecs[7].payload_type,
+					    &codecs[8].payload_type,
+					    &codecs[9].payload_type);
+				if (rc >= 2) {
+					rtp->rtp_port = htons(port);
+					rtp->rtcp_port = htons(port + 1);
+					codecs_used = rc - 1;
+					codecs_initialize(tmp_ctx, codecs,
+							  codecs_used);
+				}
+				break;
 			}
-			break;
-		}
-		case 'c': {
-			char ipv4[16];
+		case 'c':{
+				char ipv4[16];
 
-			if (sscanf(line, "c=IN IP4 %15s", ipv4) == 1) {
-				inet_aton(ipv4, &rtp->addr);
+				if (sscanf(line, "c=IN IP4 %15s", ipv4) == 1) {
+					inet_aton(ipv4, &rtp->addr);
+				}
+				break;
 			}
-			break;
-		}
 		default:
 			if (p->endp)
 				LOGP(DLMGCP, LOGL_NOTICE,
 				     "Unhandled SDP option: '%c'/%d on 0x%x\n",
-				     line[0], line[0], ENDPOINT_NUMBER(p->endp));
+				     line[0], line[0],
+				     ENDPOINT_NUMBER(p->endp));
 			else
 				LOGP(DLMGCP, LOGL_NOTICE,
 				     "Unhandled SDP option: '%c'/%d\n",
@@ -269,25 +304,24 @@ int mgcp_parse_sdp_data(struct mgcp_endpoint *endp, struct mgcp_rtp_end *rtp, st
 	/* Now select the primary and alt_codec */
 	for (i = 0; i < codecs_used && codecs_assigned < 2; ++i) {
 		struct mgcp_rtp_codec *codec = codecs_assigned == 0 ?
-					&rtp->codec : &rtp->alt_codec;
+		    &rtp->codec : &rtp->alt_codec;
 
 		if (endp->tcfg->no_audio_transcoding &&
-			!is_codec_compatible(endp, &codecs[i])) {
+		    !is_codec_compatible(endp, &codecs[i])) {
 			LOGP(DLMGCP, LOGL_NOTICE, "Skipping codec %s\n",
-				codecs[i].codec_name);
+			     codecs[i].codec_name);
 			continue;
 		}
 
 		mgcp_set_audio_info(p->cfg, codec,
-					codecs[i].payload_type,
-					codecs[i].map_line);
+				    codecs[i].payload_type, codecs[i].map_line);
 		codecs_assigned += 1;
 	}
 
 	if (codecs_assigned > 0) {
 		/* TODO/XXX: Store this per codec and derive it on use */
 		if (maxptime >= 0 && maxptime * rtp->codec.frame_duration_den >
-				rtp->codec.frame_duration_num * 1500) {
+		    rtp->codec.frame_duration_num * 1500) {
 			/* more than 1 frame */
 			rtp->packet_duration_ms = 0;
 		}
@@ -296,11 +330,95 @@ int mgcp_parse_sdp_data(struct mgcp_endpoint *endp, struct mgcp_rtp_end *rtp, st
 		     "Got media info via SDP: port %d, payload %d (%s), "
 		     "duration %d, addr %s\n",
 		     ntohs(rtp->rtp_port), rtp->codec.payload_type,
-		     rtp->codec.subtype_name ? rtp->codec.subtype_name : "unknown",
-		     rtp->packet_duration_ms, inet_ntoa(rtp->addr));
+		     rtp->codec.subtype_name ? rtp->
+		     codec.subtype_name : "unknown", rtp->packet_duration_ms,
+		     inet_ntoa(rtp->addr));
 	}
 
 	talloc_free(tmp_ctx);
 	return codecs_assigned > 0;
 }
 
+/*! \brief generate SDP response string
+ *  \endp[in] endp trunk endpoint
+ *  \endp[in] conn associated rtp connection
+ *  \endp[out] sdp_record resulting SDP string
+ *  \endp[in] size buffer size of sdp_record
+ *  \endp[in] addr IPV4 address string (e.g. 192.168.100.1)
+ *  \returns 0 on success, -1 on failure */
+int mgcp_write_response_sdp(struct mgcp_endpoint *endp,
+			    struct mgcp_conn_rtp *conn, char *sdp_record,
+			    size_t size, const char *addr)
+{
+	const char *fmtp_extra;
+	const char *audio_name;
+	int payload_type;
+	int len;
+	int nchars;
+
+	OSMO_ASSERT(endp);
+	OSMO_ASSERT(conn);
+	OSMO_ASSERT(sdp_record);
+	OSMO_ASSERT(size > 0);
+	OSMO_ASSERT(addr);
+
+	endp->cfg->get_net_downlink_format_cb(endp, &payload_type,
+					      &audio_name, &fmtp_extra, conn);
+
+	len = snprintf(sdp_record, size,
+		       "v=0\r\n"
+		       "o=- %u 23 IN IP4 %s\r\n"
+		       "s=-\r\n"
+		       "c=IN IP4 %s\r\n"
+		       "t=0 0\r\n", conn->conn->id, addr, addr);
+
+	if (len < 0 || len >= size)
+		goto buffer_too_small;
+
+	if (payload_type >= 0) {
+		nchars = snprintf(sdp_record + len, size - len,
+				  "m=audio %d RTP/AVP %d\r\n",
+				  conn->end.local_port, payload_type);
+		if (nchars < 0 || nchars >= size - len)
+			goto buffer_too_small;
+
+		len += nchars;
+
+		if (audio_name && endp->tcfg->audio_send_name) {
+			nchars = snprintf(sdp_record + len, size - len,
+					  "a=rtpmap:%d %s\r\n",
+					  payload_type, audio_name);
+
+			if (nchars < 0 || nchars >= size - len)
+				goto buffer_too_small;
+
+			len += nchars;
+		}
+
+		if (fmtp_extra) {
+			nchars = snprintf(sdp_record + len, size - len,
+					  "%s\r\n", fmtp_extra);
+
+			if (nchars < 0 || nchars >= size - len)
+				goto buffer_too_small;
+
+			len += nchars;
+		}
+	}
+	if (conn->end.packet_duration_ms > 0 && endp->tcfg->audio_send_ptime) {
+		nchars = snprintf(sdp_record + len, size - len,
+				  "a=ptime:%u\r\n",
+				  conn->end.packet_duration_ms);
+		if (nchars < 0 || nchars >= size - len)
+			goto buffer_too_small;
+
+		len += nchars;
+	}
+
+	return len;
+
+buffer_too_small:
+	LOGP(DLMGCP, LOGL_ERROR, "SDP buffer too small: %zu (needed %d)\n",
+	     size, len);
+	return -1;
+}

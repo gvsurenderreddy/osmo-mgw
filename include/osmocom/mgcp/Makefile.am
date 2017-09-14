@@ -4,4 +4,5 @@ noinst_HEADERS = \
 	mgcp_msg.h \
 	mgcp_conn.h \
 	mgcp_stat.h \
+	mgcp_sdp.h \
 	$(NULL)
