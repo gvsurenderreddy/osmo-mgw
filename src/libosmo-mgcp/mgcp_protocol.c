@@ -38,6 +38,7 @@
 #include <osmocom/mgcp/mgcp_internal.h>
 #include <osmocom/mgcp/mgcp_stat.h>
 #include <osmocom/mgcp/mgcp_msg.h>
+#include <osmocom/mgcp/mgcp_sdp.h>
 
 struct mgcp_request {
 	char *name;
@@ -190,80 +191,6 @@ static struct msgb *create_err_response(struct mgcp_endpoint *endp,
 	return create_resp(endp, code, " FAIL", msg, trans, NULL, NULL);
 }
 
-static int write_response_sdp(struct mgcp_endpoint *endp,
-			      struct mgcp_conn_rtp *conn,
-			      char *sdp_record, size_t size, const char *addr)
-{
-	const char *fmtp_extra;
-	const char *audio_name;
-	int payload_type;
-	int len;
-	int nchars;
-
-	if (!conn)
-		return -1;
-
-	endp->cfg->get_net_downlink_format_cb(endp, &payload_type,
-					      &audio_name, &fmtp_extra, conn);
-
-	len = snprintf(sdp_record, size,
-		       "v=0\r\n"
-		       "o=- %u 23 IN IP4 %s\r\n"
-		       "s=-\r\n"
-		       "c=IN IP4 %s\r\n"
-		       "t=0 0\r\n", conn->conn->id, addr, addr);
-
-	if (len < 0 || len >= size)
-		goto buffer_too_small;
-
-	if (payload_type >= 0) {
-		nchars = snprintf(sdp_record + len, size - len,
-				  "m=audio %d RTP/AVP %d\r\n",
-				  conn->end.local_port, payload_type);
-		if (nchars < 0 || nchars >= size - len)
-			goto buffer_too_small;
-
-		len += nchars;
-
-		if (audio_name && endp->tcfg->audio_send_name) {
-			nchars = snprintf(sdp_record + len, size - len,
-					  "a=rtpmap:%d %s\r\n",
-					  payload_type, audio_name);
-
-			if (nchars < 0 || nchars >= size - len)
-				goto buffer_too_small;
-
-			len += nchars;
-		}
-
-		if (fmtp_extra) {
-			nchars = snprintf(sdp_record + len, size - len,
-					  "%s\r\n", fmtp_extra);
-
-			if (nchars < 0 || nchars >= size - len)
-				goto buffer_too_small;
-
-			len += nchars;
-		}
-	}
-	if (conn->end.packet_duration_ms > 0 && endp->tcfg->audio_send_ptime) {
-		nchars = snprintf(sdp_record + len, size - len,
-				  "a=ptime:%u\r\n",
-				  conn->end.packet_duration_ms);
-		if (nchars < 0 || nchars >= size - len)
-			goto buffer_too_small;
-
-		len += nchars;
-	}
-
-	return len;
-
-buffer_too_small:
-	LOGP(DLMGCP, LOGL_ERROR, "SDP buffer too small: %zu (needed %d)\n",
-	     size, len);
-	return -1;
-}
-
 /* Format MGCP response string (with SDP attached) */
 static struct msgb *create_response_with_sdp(struct mgcp_endpoint *endp,
 					     struct mgcp_conn_rtp *conn,
@@ -291,8 +218,8 @@ static struct msgb *create_response_with_sdp(struct mgcp_endpoint *endp,
 	if (len < 0)
 		return NULL;
 
-	nchars = write_response_sdp(endp, conn, sdp_record + len,
-				    sizeof(sdp_record) - len - 1, addr);
+	nchars = mgcp_write_response_sdp(endp, conn, sdp_record + len,
+					 sizeof(sdp_record) - len - 1, addr);
 	if (nchars < 0)
 		return NULL;
 
@@ -688,7 +615,7 @@ mgcp_header_done:
 
 	/* set up RTP media parameters */
 	if (have_sdp)
-		mgcp_parse_sdp_data(endp, &conn->end, p);
+		mgcp_parse_sdp_data(endp, conn, p);
 	else if (endp->local_options.codec)
 		mgcp_set_audio_info(p->cfg, &conn->end.codec,
 				    PTYPE_UNDEFINED, endp->local_options.codec);
@@ -835,7 +762,7 @@ mgcp_header_done:
 			conn->conn->mode = conn->conn->mode_orig;
 
 	if (have_sdp)
-		mgcp_parse_sdp_data(endp, &conn->end, p);
+		mgcp_parse_sdp_data(endp, conn, p);
 
 	set_local_cx_options(endp->tcfg->endpoints, &endp->local_options,
 			     local_options);
