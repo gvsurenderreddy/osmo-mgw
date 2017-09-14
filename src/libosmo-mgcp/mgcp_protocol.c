@@ -692,6 +692,8 @@ mgcp_header_done:
 	else if (endp->local_options.codec)
 		mgcp_set_audio_info(p->cfg, &conn->end.codec,
 				    PTYPE_UNDEFINED, endp->local_options.codec);
+	conn->end.fmtp_extra = talloc_strdup(tcfg->endpoints,
+					     tcfg->audio_fmtp_extra);
 
 	if (p->cfg->force_ptime) {
 		conn->end.packet_duration_ms = p->cfg->force_ptime;
