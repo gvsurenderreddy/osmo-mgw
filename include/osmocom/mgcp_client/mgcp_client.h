@@ -35,6 +35,7 @@ struct mgcp_response {
 	char *body;
 	struct mgcp_response_head head;
 	uint16_t audio_port;
+	uint32_t audio_ip;
 };
 
 void mgcp_client_conf_init(struct mgcp_client_conf *conf);

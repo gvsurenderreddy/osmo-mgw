@@ -19,6 +19,7 @@
  */
 
 #include <string.h>
+#include <arpa/inet.h>
 
 #include <osmocom/core/msgb.h>
 #include <osmocom/core/application.h>
@@ -94,16 +95,24 @@ void test_response_cb(struct mgcp_response *response, void *priv)
 {
 	OSMO_ASSERT(priv == mgcp);
 	mgcp_response_parse_params(response);
+	char buf[256];
+	struct sockaddr_in sa;
+
+	struct in_addr addr;
+	addr.s_addr = response->audio_ip;
+	inet_ntop(AF_INET, &(sa.sin_addr), buf, INET_ADDRSTRLEN);
 
 	printf("response cb received:\n"
 	       "  head.response_code = %d\n"
 	       "  head.trans_id = %u\n"
 	       "  head.comment = %s\n"
-	       "  audio_port = %u\n",
+	       "  audio_port = %u\n"
+	       "  audio_ip = %s\n",
 	       response->head.response_code,
 	       response->head.trans_id,
 	       response->head.comment,
-	       response->audio_port
+	       response->audio_port,
+	       inet_ntoa(addr)
 	      );
 }
 
