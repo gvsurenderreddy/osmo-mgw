@@ -613,6 +613,23 @@ struct msgb *mgcp_msg_crcx(struct mgcp_client *mgcp,
 		 mgcp_client_cmode_name(mode));
 }
 
+struct msgb *mgcp_msg_crcx_id(struct mgcp_client *mgcp, uint16_t rtp_endpoint,
+			      unsigned int call_id, uint32_t conn_id,
+			      enum mgcp_connection_mode mode)
+{
+	mgcp_trans_id_t trans_id = mgcp_client_next_trans_id(mgcp);
+	return mgcp_msg_from_str(trans_id,
+				 "CRCX %u %x@mgw MGCP 1.0\r\n"
+				 "C: %x\r\n"
+				 "I: %u\r\n"
+				 "L: p:20, a:AMR, nt:IN\r\n"
+				 "M: %s\r\n",
+				 trans_id,
+				 rtp_endpoint,
+				 call_id,
+				 conn_id, mgcp_client_cmode_name(mode));
+}
+
 struct msgb *mgcp_msg_mdcx(struct mgcp_client *mgcp,
 			   uint16_t rtp_endpoint, const char *rtp_conn_addr,
 			   uint16_t rtp_port, enum mgcp_connection_mode mode)
@@ -631,6 +648,28 @@ struct msgb *mgcp_msg_mdcx(struct mgcp_client *mgcp,
 		 mgcp_client_cmode_name(mode),
 		 rtp_conn_addr,
 		 rtp_port);
+}
+
+struct msgb *mgcp_msg_mdcx_id(struct mgcp_client *mgcp,
+			      uint16_t rtp_endpoint, unsigned int call_id,
+			      uint32_t conn_id, const char *rtp_conn_addr,
+			      uint16_t rtp_port, enum mgcp_connection_mode mode)
+{
+	mgcp_trans_id_t trans_id = mgcp_client_next_trans_id(mgcp);
+	return mgcp_msg_from_str(trans_id,
+				 "MDCX %u %x@mgw MGCP 1.0\r\n"
+				 "C: %x\r\n"
+				 "I: %u\r\n"
+				 "M: %s\r\n"
+				 "\r\n"
+				 "c=IN IP4 %s\r\n"
+				 "m=audio %u RTP/AVP 255\r\n",
+				 trans_id,
+				 rtp_endpoint,
+				 call_id,
+				 conn_id,
+				 mgcp_client_cmode_name(mode),
+				 rtp_conn_addr, rtp_port);
 }
 
 struct msgb *mgcp_msg_dlcx(struct mgcp_client *mgcp, uint16_t rtp_endpoint,

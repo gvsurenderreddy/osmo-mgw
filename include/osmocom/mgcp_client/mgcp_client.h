@@ -68,9 +68,18 @@ struct msgb *mgcp_msg_crcx(struct mgcp_client *mgcp,
 			   uint16_t rtp_endpoint, unsigned int call_id,
 			   enum mgcp_connection_mode mode);
 
+struct msgb *mgcp_msg_crcx_id(struct mgcp_client *mgcp, uint16_t rtp_endpoint,
+			      unsigned int call_id, uint32_t conn_id,
+			      enum mgcp_connection_mode mode);
+
 struct msgb *mgcp_msg_mdcx(struct mgcp_client *mgcp,
 			   uint16_t rtp_endpoint, const char *rtp_conn_addr,
 			   uint16_t rtp_port, enum mgcp_connection_mode mode);
+
+struct msgb *mgcp_msg_mdcx_id(struct mgcp_client *mgcp,
+			      uint16_t rtp_endpoint, unsigned int call_id,
+			      uint32_t conn_id, const char *rtp_conn_addr,
+			      uint16_t rtp_port, enum mgcp_connection_mode mode);
 
 struct msgb *mgcp_msg_dlcx(struct mgcp_client *mgcp, uint16_t rtp_endpoint,
 			   unsigned int call_id);
