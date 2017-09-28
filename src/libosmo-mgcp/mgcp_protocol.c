@@ -1239,7 +1239,7 @@ int mgcp_endpoints_allocate(struct mgcp_trunk_config *tcfg)
 	if (!tcfg->endpoints)
 		return -1;
 
-	mgcp_init_endpoint_types(tcfg->ep_types);
+	mgcp_init_endpoint_types(&tcfg->ep_types);
 
 
 	for (i = 0; i < tcfg->number_endpoints; ++i) {

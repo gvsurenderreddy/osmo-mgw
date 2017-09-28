@@ -23,8 +23,9 @@
 
 #pragma once
 
-#include <osmocom/mgcp/mgcp_internal.h>
-#include <osmocom/mgcp/mgcp_ep.h>
+struct sockaddr_in;
+
+struct mgcp_conn;
 
 /* Callback type for RTP dispatcher functions
    (e.g mgcp_dispatch_rtp_bridge_cb, see below) */
