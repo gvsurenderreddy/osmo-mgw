@@ -38,6 +38,7 @@
 #include <osmocom/mgcp/mgcp_stat.h>
 #include <osmocom/mgcp/osmux.h>
 #include <osmocom/mgcp/mgcp_conn.h>
+#include <osmocom/mgcp/mgcp_ep.h>
 
 #define RTP_SEQ_MOD		(1 << 16)
 #define RTP_MAX_DROPOUT		3000
@@ -1018,8 +1019,8 @@ static int rtp_data_net(struct osmo_fd *fd, unsigned int what)
 
 	/* Execute endpoint specific implementation that handles the
 	 * dispatching of the RTP data */
-	return endp->type.dispatch_rtp_cb(proto, &addr, buf, sizeof(buf),
-					  conn_src->conn);
+	return endp->type->dispatch_rtp_cb(proto, &addr, buf, sizeof(buf),
+					   conn_src->conn);
 }
 
 /*! \brief set IP Type of Service parameter

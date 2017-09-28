@@ -24,6 +24,7 @@
 #include <osmocom/mgcp/mgcp_internal.h>
 #include <osmocom/mgcp/mgcp_stat.h>
 #include <osmocom/mgcp/mgcp_msg.h>
+#include <osmocom/mgcp/mgcp_ep.h>
 
 #include <osmocom/core/application.h>
 #include <osmocom/core/talloc.h>
@@ -1009,6 +1010,7 @@ static void test_packet_error_detection(int patch_ssrc, int patch_ts)
 	struct mgcp_endpoint endp;
 	struct mgcp_rtp_state state;
 	struct mgcp_rtp_end *rtp;
+	struct mgcp_endpoint_type ep_type;
 	struct sockaddr_in addr = { 0 };
 	char buffer[4096];
 	uint32_t last_ssrc = 0;
@@ -1026,7 +1028,8 @@ static void test_packet_error_detection(int patch_ssrc, int patch_ts)
 	memset(&endp, 0, sizeof(endp));
 	memset(&state, 0, sizeof(state));
 
-	endp.type.max_conns = 2;
+	endp.type = &ep_type;
+	endp.type->max_conns = 2;
 
 	trunk.number_endpoints = 1;
 	trunk.endpoints = &endp;

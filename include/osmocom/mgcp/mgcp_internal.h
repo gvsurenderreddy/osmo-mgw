@@ -219,19 +219,7 @@ struct mgcp_conn {
 
 #include <osmocom/mgcp/mgcp_conn.h>
 
-/* Callback type for RTP dispatcher functions
-   (e.g mgcp_dispatch_rtp_bridge_cb, see below) */
-typedef int (*mgcp_dispatch_rtp_cb)(int proto, struct sockaddr_in *addr, char *buf,
-				    unsigned int buf_size, struct mgcp_conn *conn);
-
-/*! MGCP endpoint properties */
-struct mgcp_endpoint_type {
-	/*!< maximum number of connections */
-	int max_conns;
-
-	/*!< callback that defines how to dispatch incoming RTP data */
-	mgcp_dispatch_rtp_cb dispatch_rtp_cb;
-};
+struct mgcp_endpoint_type;
 
 struct mgcp_endpoint {
 	char *callid;
@@ -243,7 +231,7 @@ struct mgcp_endpoint {
 	struct mgcp_config *cfg;
 	struct mgcp_trunk_config *tcfg;
 
-	struct mgcp_endpoint_type type;
+	struct mgcp_endpoint_type *type;
 
 	/* fields for re-transmission */
 	char *last_trans;

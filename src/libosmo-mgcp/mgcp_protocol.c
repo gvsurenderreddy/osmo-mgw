@@ -37,6 +37,7 @@
 #include <osmocom/mgcp/mgcp_internal.h>
 #include <osmocom/mgcp/mgcp_stat.h>
 #include <osmocom/mgcp/mgcp_msg.h>
+#include <osmocom/mgcp/mgcp_ep.h>
 
 struct mgcp_request {
 	char *name;
@@ -585,10 +586,10 @@ mgcp_header_done:
 	}
 
 	/* Check if we are able to accept the creation of another connection */
-	if (llist_count(&endp->conns) >= endp->type.max_conns) {
+	if (llist_count(&endp->conns) >= endp->type->max_conns) {
 		LOGP(DLMGCP, LOGL_ERROR,
 		     "CRCX: endpoint:%x endpoint full, max. %i connections allowed!\n",
-		     endp->type.max_conns, ENDPOINT_NUMBER(endp));
+		     endp->type->max_conns, ENDPOINT_NUMBER(endp));
 		if (tcfg->force_realloc) {
 			/* There is no more room for a connection, make some
 			 * room by blindly tossing the oldest of the two two
@@ -1238,6 +1239,9 @@ int mgcp_endpoints_allocate(struct mgcp_trunk_config *tcfg)
 	if (!tcfg->endpoints)
 		return -1;
 
+	mgcp_init_endpoint_types(tcfg->ep_types);
+
+
 	for (i = 0; i < tcfg->number_endpoints; ++i) {
 		INIT_LLIST_HEAD(&tcfg->endpoints[i].conns);
 		tcfg->endpoints[i].cfg = tcfg->cfg;
@@ -1248,14 +1252,14 @@ int mgcp_endpoints_allocate(struct mgcp_trunk_config *tcfg)
 		 * implementation, and must not be changed unless support for
 		 * more than two connections (e.g. conferences) is
 		 * implemented */
-		tcfg->endpoints[i].type.max_conns = 2;
+		tcfg->endpoints[i].type->max_conns = 2;
 
 		/* NOTE: The implementation can currently only dispatch RTP
 		 * data to other RTP connections. The exact dispatchin
 		 * behaviour is implemented in the assigned callback
 		 * function. Please note that only works properly with 2
 		 * connections at max */
-		tcfg->endpoints[i].type.dispatch_rtp_cb =
+		tcfg->endpoints[i].type->dispatch_rtp_cb =
 		    mgcp_dispatch_rtp_bridge_cb;
 	}
 

@@ -23,6 +23,7 @@
 
 #include <osmocom/mgcp/mgcp_conn.h>
 #include <osmocom/mgcp/mgcp_internal.h>
+#include <osmocom/mgcp/mgcp_ep.h>
 
 /* Reset codec state and free memory */
 static void mgcp_rtp_codec_reset(struct mgcp_rtp_codec *codec)
@@ -85,7 +86,7 @@ struct mgcp_conn *mgcp_conn_alloc(void *ctx, struct mgcp_endpoint *endp,
 	OSMO_ASSERT(strlen(name) < sizeof(conn->name));
 
 	/* Do not allow more then two connections */
-	if (llist_count(&endp->conns) >= endp->type.max_conns)
+	if (llist_count(&endp->conns) >= endp->type->max_conns)
 		return NULL;
 
 	/* Prevent duplicate connection IDs */

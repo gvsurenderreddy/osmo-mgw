@@ -26,6 +26,7 @@
 #include <osmocom/core/write_queue.h>
 #include <osmocom/core/timer.h>
 #include <osmocom/core/logging.h>
+#include <osmocom/mgcp/mgcp_ep.h>
 
 #include <arpa/inet.h>
 #include <sys/types.h>
@@ -159,6 +160,8 @@ struct mgcp_trunk_config {
 
 	unsigned int number_endpoints;
 	struct mgcp_endpoint *endpoints;
+
+	struct mgcp_endpoint_typeset ep_types;
 };
 
 enum mgcp_role {
