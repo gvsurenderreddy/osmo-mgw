@@ -792,9 +792,14 @@ static void test_retransmission(void)
 			OSMO_ASSERT(false);
 		}
 
-		if (msg && strcmp(t->name, CRCX))
-			get_conn_id_from_response(msg->data, last_conn_id,
-						  sizeof(last_conn_id));
+		if (strcmp(t->name, CRCX) == 0) {
+			int rc;
+			rc = get_conn_id_from_response(msg->data, last_conn_id, sizeof(last_conn_id));
+			if (rc)
+				printf("get_conn_id_from_response() failed\n");
+			else
+				printf("get_conn_id_from_response() returns conn id '%s'\n", last_conn_id);
+		}
 
 		msgb_free(msg);
 
